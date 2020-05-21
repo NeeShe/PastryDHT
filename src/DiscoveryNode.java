@@ -1,0 +1,189 @@
+import model.*;
+
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
+import java.net.ServerSocket;
+import java.net.Socket;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Random;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
+
+public class DiscoveryNode extends Thread {
+    private Random random;
+    protected int port;
+    protected Map<byte[], NodeAddress> nodes;
+    protected ReadWriteLock readWriteLock;
+
+    public DiscoveryNode(int port) {
+        random = new Random();
+        this.port = port;
+        nodes = new HashMap();
+        readWriteLock = new ReentrantReadWriteLock();
+    }
+
+    public static void main(String[] args) {
+        try {
+            int port = Integer.parseInt(args[0]);
+            System.out.println("Starting Discovery Node");
+            new Thread(new DiscoveryNode(port)).start();
+        } catch (Exception e) {
+            System.out.println("Usage: DiscoveryNode port");
+            System.err.println(e.getMessage());
+        }
+    }
+
+    @Override
+    public void run() {
+        try {
+            ServerSocket serverSocket = new ServerSocket(port);
+            System.out.println("discovery node started successfully on port " + port);
+
+            //accept connections
+            while (true) {
+                Socket socket = serverSocket.accept();
+                System.out.println("Received connection from '" + socket.getInetAddress() + ":" + socket.getPort() + "'.");
+                System.out.println("Starting a worker thread");
+                new Thread(new DiscoveryNodeWorker(socket)).start();
+            }
+        } catch (Exception e) {
+            System.err.println(e.getMessage());
+        }
+    }
+
+    protected void addNode(byte[] id, NodeAddress nodeAddress) throws Exception {
+        //check to see if id is already registered
+        readWriteLock.readLock().lock();
+        try {
+            //check to see if id already exists in cluster
+            for (byte[] array : nodes.keySet()) {
+                if (java.util.Arrays.equals(array, id)) {
+                    throw new Exception("ID '" + Util.convertBytesToHex(id) + "' already exists in cluster");
+                }
+            }
+        } finally {
+            readWriteLock.readLock().unlock();
+        }
+
+        //add node to cluster using id and
+        readWriteLock.writeLock().lock();
+        try {
+            nodes.put(id, nodeAddress);
+            System.out.println("Added ID '" + Util.convertBytesToHex(id) + "' for node at '" + nodeAddress + "'.");
+        } finally {
+            readWriteLock.writeLock().unlock();
+        }
+    }
+
+    protected byte[] getRandomNode() throws Exception {
+        readWriteLock.readLock().lock();
+        try {
+            if (nodes.size() != 0) {
+                //generate random number and iterate through peers while decrementing count
+                int count = random.nextInt() % nodes.size();
+                if (count < 0) {
+                    count *= -1;
+                }
+
+                //find "count"th element in nodes
+                for (byte[] id : nodes.keySet()) {
+                    if (count-- == 0) {
+                        return id;
+                    }
+                }
+            }
+
+            return null;
+        } finally {
+            readWriteLock.readLock().unlock();
+        }
+    }
+    protected void printActiveNodes() {
+        readWriteLock.readLock().lock();
+        try {
+            StringBuilder str = new StringBuilder("----ACTIVE NODES----");
+            for(Map.Entry<byte[],NodeAddress> entry : nodes.entrySet()) {
+                str.append("\n" + Util.convertBytesToHex(entry.getKey()) + " : " + entry.getValue());
+            }
+            str.append("\n--------------------");
+            System.out.println(str.toString());
+        } finally {
+            readWriteLock.readLock().unlock();
+        }
+    }
+
+    private class DiscoveryNodeWorker extends Thread {
+        protected Socket socket;
+
+        public DiscoveryNodeWorker(Socket socket) {
+            this.socket  = socket;
+        }
+
+        @Override
+        public void run() {
+            try {
+                //read request message
+                ObjectInputStream in = new ObjectInputStream(socket.getInputStream());
+                Message requestMsg = (Message) in.readObject();
+
+                Message replyMsg = null;
+                switch(requestMsg.getMsgType()) {
+                    case Message.REGISTER_NODE_MSG:
+                        RegisterMessage registerNodeMsg = (RegisterMessage) requestMsg;
+
+                        try {
+                            byte[] id = getRandomNode(); //getting random node before so we don't have to worry about blacklisting the node we're adding
+                            if(id == null) {
+                                replyMsg = new SuccessMessage();
+                            } else {
+                                readWriteLock.readLock().lock();
+                                try {
+                                    replyMsg = new NearByNodeInfo(id, nodes.get(id));
+                                } finally {
+                                    readWriteLock.readLock().unlock();
+                                }
+                            }
+
+                            addNode(registerNodeMsg.getID(), new NodeAddress(registerNodeMsg.getNodeName(), socket.getInetAddress(), registerNodeMsg.getPort()));
+                        } catch(Exception e) {
+                            replyMsg = new ErrorMessage(e.getMessage());
+                        }
+
+                        //print out nodes
+                        printActiveNodes();
+
+                        break;
+                    case Message.REQUEST_RANDOM_NODE_MSG:
+                        try {
+                            byte[] id = getRandomNode();
+                            if(id == null) {
+                                replyMsg = new ErrorMessage("There aren't any nodes registered in the cluster yet.");
+                            } else {
+                                readWriteLock.readLock().lock();
+                                try {
+                                    replyMsg = new NearByNodeInfo(id, nodes.get(id));
+                                } finally {
+                                    readWriteLock.readLock().unlock();
+                                }
+                            }
+                        } catch(Exception e) {
+                            replyMsg = new ErrorMessage(e.getMessage());
+                        }
+                        break;
+                    default:
+                        System.err.println("Unrecognized request message type '" + requestMsg.getMsgType() + "'");
+                        break;
+                }
+
+                //write reply message
+                if(replyMsg != null) {
+                    ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
+                    out.writeObject(replyMsg);
+                }
+            } catch(Exception e) {
+                System.err.println(e.getMessage());
+            }
+        }
+    }
+}
