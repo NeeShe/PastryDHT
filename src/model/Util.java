@@ -1,3 +1,5 @@
+package model;
+
 import java.nio.ByteBuffer;
 import java.util.Random;
 

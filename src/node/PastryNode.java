@@ -1,8 +1,8 @@
-import model.ErrorMessage;
-import model.Message;
-import model.NearByNodeInfo;
-import model.RegisterMessage;
+package node;
 
+import model.*;
+
+import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.net.InetAddress;
@@ -92,16 +92,10 @@ public class PastryNode extends Thread{
                     case Message.NEARBY_NODE_INFO_MSG:
                         NearByNodeInfo nodeInfoMsg = (NearByNodeInfo) replyMsg;
                         System.out.println("Sending node join message to '" + nodeInfoMsg.getNodeAddress().getInetAddress() + ":" + nodeInfoMsg.getNodeAddress().getPort() + "'");
-//TODO
-//                        //send node join message
-//                        NodeJoinMsg nodeJoinMsg = new NodeJoinMsg(id, 0, new NodeAddress(name, null, port));
-//                        nodeJoinMsg.addHop(nodeInfoMsg.getNodeAddress());
-//                        Socket nodeSocket = new Socket(nodeInfoMsg.getNodeAddress().getInetAddress(), nodeInfoMsg.getNodeAddress().getPort());
-//                        ObjectOutputStream nodeOut = new ObjectOutputStream(nodeSocket.getOutputStream());
-//                        nodeOut.writeObject(nodeJoinMsg);
-
-                            success = true;
-                            break;
+                        //send node join message
+                        this.sendJoin(nodeInfoMsg);
+                        success = true;
+                        break;
                     case Message.SUCCESS_MSG:
                             //if you're the first node registering a success messasge is sent back
                             success = true;
@@ -129,6 +123,20 @@ public class PastryNode extends Thread{
         }
     }
 
+    private void sendJoin(NearByNodeInfo nodeInfoMsg) {
+        NodeJoinMessage nodeJoinMsg = new NodeJoinMessage(nodeID, 0, new NodeAddress(name, null, port));
+        nodeJoinMsg.addHop(nodeInfoMsg.getNodeAddress());
+        Socket nodeSocket = null;
+        try {
+            nodeSocket = new Socket(nodeInfoMsg.getNodeAddress().getInetAddress(), nodeInfoMsg.getNodeAddress().getPort());
+            ObjectOutputStream nodeOut = new ObjectOutputStream(nodeSocket.getOutputStream());
+            nodeOut.writeObject(nodeJoinMsg);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+    }
+
 
     public static void main(String[] args) {
         try {
@@ -139,7 +147,7 @@ public class PastryNode extends Thread{
             new Thread(new PastryNode(name,port,discoveryNodePort, id)).start();
         } catch(Exception e) {
             System.err.println(e.getMessage());
-            System.out.println("Usage: PastryNode port discoveryNodePort [id]");
+            System.out.println("Usage: node.PastryNode port discoveryNodePort [id]");
         }
     }
 

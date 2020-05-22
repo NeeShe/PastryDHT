@@ -1,3 +1,5 @@
+package node;
+
 import model.*;
 
 import java.io.ObjectInputStream;
@@ -29,7 +31,7 @@ public class DiscoveryNode extends Thread {
             System.out.println("Starting Discovery Node");
             new Thread(new DiscoveryNode(port)).start();
         } catch (Exception e) {
-            System.out.println("Usage: DiscoveryNode port");
+            System.out.println("Usage: node.DiscoveryNode port");
             System.err.println(e.getMessage());
         }
     }
