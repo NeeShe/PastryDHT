@@ -1,4 +1,4 @@
-package model;
+package message;
 
 public class SuccessMessage extends Message {
     @Override

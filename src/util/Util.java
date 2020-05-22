@@ -1,4 +1,4 @@
-package model;
+package util;
 
 import java.nio.ByteBuffer;
 import java.util.Random;

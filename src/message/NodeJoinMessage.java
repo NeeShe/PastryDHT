@@ -1,5 +1,6 @@
-package model;
+package message;
 
+import util.NodeAddress;
 import util.Util;
 
 import java.util.LinkedList;
