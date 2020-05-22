@@ -1,5 +1,7 @@
 package model;
 
+import util.Util;
+
 import java.util.LinkedList;
 import java.util.List;
 
