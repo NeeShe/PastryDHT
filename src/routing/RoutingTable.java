@@ -71,19 +71,25 @@ public class RoutingTable {
         }
     }
 
-//    public NodeAddress searchExact(PastryNode node, byte[] id, int rowIndex) {
-//        node.readWriteLock.readLock().lock();
-//        try{
-//            String idStr = convertBytesToHex(id).substring(rowIndex, rowIndex + 1);
-//            return routingTable.get(rowIndex).get(idStr);
-//        } finally {
-//            node.readWriteLock.readLock().unlock();
-//        }
-//    }
+    public NodeAddress searchExact(PastryNode node, byte[] id, int rowIndex) {
+        System.out.println("Inside RoutingTable.java searching for exact match");
+        node.readWriteLock.readLock().lock();
+        try{
+            String idStr = convertBytesToHex(id).substring(rowIndex, rowIndex + 1);
+            System.out.println("Got exact match result inside RoutingTable.java as " + idStr + " and now will return");
+            return routingTable.get(rowIndex).get(idStr);
+        } finally {
+            System.out.println("Unlocking");
+            node.readWriteLock.readLock().unlock();
+            System.out.println("Unlocked");
+        }
+    }
 
     public NodeAddress searchClosest(PastryNode node, byte[] searchId, int prefixLen) {
+        System.out.println("will now lock closest search");
         node.readWriteLock.readLock().lock();
         try {
+            System.out.println("Inside RoutingTable.java searching for closest match");
             String searchIdStr = convertBytesToHex(searchId);
             short closest = (short)Integer.parseInt(node.idStr.substring(prefixLen, prefixLen+1));
             int closestDist = getHexDistance(node.idStr.substring(prefixLen, prefixLen+1), searchIdStr.substring(prefixLen, prefixLen+1));

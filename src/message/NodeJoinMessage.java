@@ -24,7 +24,9 @@ public class NodeJoinMessage extends Message{
     }
 
     public void setLongestPrefixMatch(int prefixLength) {
+        System.out.println("setting the prefixLength of node join msg");
         this.prefixLength = prefixLength;
+        System.out.println("done setting");
     }
 
     public int getPrefixLength() {

@@ -95,7 +95,7 @@ public class PastryNode extends Thread{
                 System.out.println("Waiting for requests");
                 Socket socket = serverSocket.accept();
                 System.out.println("Received connection from '" + socket.getInetAddress() + ":" + socket.getPort() + "'.");
-               new Thread(new PastryNodeWorker(socket)).start();
+               new Thread(new PastryNodeWorker(socket, this)).start();
             }
         } catch(Exception e) {
             e.printStackTrace();
