@@ -1,4 +1,6 @@
-package model;
+package util;
+
+import message.Message;
 
 public class NearByNodeInfo extends Message {
     private byte[] id;

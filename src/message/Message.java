@@ -1,4 +1,4 @@
-package model;
+package message;
 
 import java.io.Serializable;
 
@@ -13,6 +13,7 @@ public abstract class Message implements Serializable {
             REQUEST_RANDOM_NODE_MSG = 7,
             WRITE_DATA_MSG = 8,
             READ_DATA_MSG = 9;
+
 
     public abstract int getMsgType();
 }

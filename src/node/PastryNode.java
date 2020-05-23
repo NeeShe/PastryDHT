@@ -1,6 +1,12 @@
 package node;
 
-import model.*;
+import javafx.scene.Node;
+import message.*;
+import routing.LeafSet;
+import routing.RoutingTable;
+import util.NearByNodeInfo;
+import util.NodeAddress;
+import util.Util;
 
 import java.io.IOException;
 import java.io.ObjectInputStream;
@@ -8,72 +14,47 @@ import java.io.ObjectOutputStream;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 
 public class PastryNode extends Thread{
     public static final int ID_BYTES = 2;
-    protected int port;
-    protected int discoveryNodePort;
-    protected InetAddress discoveryNodeAddress;
-    protected byte[] nodeID;
-    protected short idValue;
-    protected String idStr;
-    protected String name;
+    public static final int leafSize = 1;
+    public int port;
+    public int discoveryNodePort;
+    public InetAddress discoveryNodeAddress;
+    public byte[] nodeID;
+    public String idStr;
+    public String name;
+    public NodeAddress address;
+    public LeafSet leafSet;
+    public RoutingTable routingTable;
+    public ReadWriteLock readWriteLock;
 
-    public PastryNode(String name, int port, int discoveryNodePort, byte[] id) {
+    public PastryNode(byte[] id, String name, int port, int discoveryNodePort) {
         this.name=name;
         this.port = port;
         this.discoveryNodePort = discoveryNodePort;
         this.nodeID = id;
-        idValue = Util.convertBytesToShort(this.nodeID);
-        idStr = Util.convertBytesToHex(id);
+        this.idStr = Util.convertBytesToHex(this.nodeID);
+        this.address = new NodeAddress(this.name, null, this.port);
+        this.leafSet = new LeafSet(this.nodeID, this.leafSize);
+        this.routingTable = new RoutingTable();
+        this.readWriteLock = new ReentrantReadWriteLock();
 
         System.out.println("Hi Im "+name);
         System.out.println("My id is "+idStr);
-        //initialize tree map structures
-//        lessThanLS = new TreeMap(
-//                new Comparator<byte[]>() {
-//                    @Override
-//                    public int compare(byte[] b1, byte[] b2) {
-//                        int s1 = lessThanDistance(convertBytesToShort(b1), idValue),
-//                                s2 = lessThanDistance(convertBytesToShort(b2), idValue);
-//
-//                        if (s1 < s2) {
-//                            return 1;
-//                        } else if (s1 > s2) {
-//                            return -1;
-//                        } else {
-//                            return 0;
-//                        }
-//                    }
-//                }
-//        );
-
-//        greaterThanLS = new TreeMap(
-//                new Comparator<byte[]>() {
-//                    @Override
-//                    public int compare(byte[] b1, byte[] b2) {
-//                        int s1 = greaterThanDistance(convertBytesToShort(b1), idValue),
-//                                s2 = greaterThanDistance(convertBytesToShort(b2), idValue);
-//
-//                        if (s1 > s2) {
-//                            return 1;
-//                        } else if (s1 < s2) {
-//                            return -1;
-//                        } else {
-//                            return 0;
-//                        }
-//                    }
-//                }
-//        );
     }
+
 
     @Override
     public void run() {
         try {
             ServerSocket serverSocket = new ServerSocket(port);
 
-            //register your id with the discovery node
+            //register the nodeID into the discovery node list
             boolean success = false;
             while(!success) {
                 System.out.println("Registering ID '" + Util.convertBytesToHex(nodeID) + "' to '" + discoveryNodePort + "'");
@@ -114,7 +95,7 @@ public class PastryNode extends Thread{
                 System.out.println("Waiting for requests");
                 Socket socket = serverSocket.accept();
                 System.out.println("Received connection from '" + socket.getInetAddress() + ":" + socket.getPort() + "'.");
-               new Thread(new PastryNodeWorker(socket)).start();
+               new Thread(new PastryNodeWorker(socket, this)).start();
             }
         } catch(Exception e) {
             e.printStackTrace();
@@ -143,99 +124,13 @@ public class PastryNode extends Thread{
             int port = Integer.parseInt(args[1]);
             int discoveryNodePort = Integer.parseInt(args[2]);
             byte[] id= (args.length == 4) ? Util.convertHexToBytes(args[3]) : Util.generateRandomID(ID_BYTES);
-            new Thread(new PastryNode(name,port,discoveryNodePort, id)).start();
+            new Thread(new PastryNode(id, name, port, discoveryNodePort)).start();
         } catch(Exception e) {
             System.err.println(e.getMessage());
             System.out.println("Usage: node.PastryNode port discoveryNodePort [id]");
         }
     }
 
-    protected class PastryNodeWorker extends Thread{
-        protected Socket socket;
 
-        public PastryNodeWorker(Socket socket) {
-            this.socket  = socket;
-        }
-
-        @Override
-        public void run() {
-            try {
-                //read request message
-                ObjectInputStream in = new ObjectInputStream(socket.getInputStream());
-                Message requestMsg = (Message) in.readObject();
-
-                Message replyMsg = null;
-                switch(requestMsg.getMsgType()) {
-                    case Message.NODE_JOIN_MSG:
-                        this.nodeJoinHandler(requestMsg);
-                        break;
-                    default:
-                        System.err.println("Unrecognized request message type '" + requestMsg.getMsgType() + "'");
-                        break;
-                }
-
-                //write reply message
-                if(replyMsg != null) {
-                    ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
-                    out.writeObject(replyMsg);
-                }
-            } catch(Exception e) {
-                e.printStackTrace();
-                System.err.println(e.getMessage());
-            }
-        }
-
-        private void nodeJoinHandler(Message requestMsg) {
-            try{
-                NodeJoinMessage nodeJoinMsg = (NodeJoinMessage) requestMsg;
-                if(nodeJoinMsg.getNodeAddress().getInetAddress() == null) {
-                    nodeJoinMsg.getNodeAddress().setInetAddress(socket.getInetAddress());
-                }
-                System.out.println("Received node join message '" + nodeJoinMsg.toString() + "'.");
-                int p = nodeJoinMsg.getPrefixLength();
-//TODO
-//                //search for an exact match in the routing table
-//                NodeAddress nodeAddress = searchRoutingTableExact(nodeJoinMsg.getID(), p);
-//                if(nodeAddress != null) {
-//                    //update longest prefix match if we have indeed found a match
-//                    nodeJoinMsg.setLongestPrefixMatch((nodeJoinMsg.getPrefixLength() + 1));
-//                }
-//
-//                //search for closest node in routing table
-//                if(nodeAddress == null) {
-//                    nodeAddress = searchRoutingTableClosest(nodeJoinMsg.getID(), p);
-//                }
-//
-//                //find closest node in leaf set
-//                if(nodeAddress == null || nodeJoinMsg.hopContains(nodeAddress)) {
-//                    nodeAddress = searchLeafSetClosest(nodeJoinMsg.getID());
-//                }
-//
-//                //send routing information to joining node
-//                Socket joinNodeSocket = null;
-//                joinNodeSocket = new Socket(nodeJoinMsg.getNodeAddress().getInetAddress(), nodeJoinMsg.getNodeAddress().getPort());
-//                ObjectOutputStream joinNodeOut = new ObjectOutputStream(joinNodeSocket.getOutputStream());
-//                joinNodeOut.writeObject(
-//                        new RoutingInfoMsg(getRelevantLeafSet(), p, getRelevantRoutingTable(p),
-//                                nodeAddress.getInetAddress() == null
-//                                //last routing info message received by the joining node
-//                        )
-//                );
-//                joinNodeSocket.close();
-//                //if we found a closer node forward the node join message
-//                if(nodeAddress.getInetAddress() != null) {
-//                    System.out.println("Forwarding node join message with id '" + Util.convertBytesToHex(nodeJoinMsg.getID()) + "' to '" + nodeAddress + "'");
-//                    nodeJoinMsg.addHop(nodeAddress);
-//                    Socket nodeSocket = new Socket(nodeAddress.getInetAddress(), nodeAddress.getPort());
-//                    ObjectOutputStream nodeOut = new ObjectOutputStream(nodeSocket.getOutputStream());
-//                    nodeOut.writeObject(nodeJoinMsg);
-//                    nodeSocket.close();
-//                }
-//
-            }catch(Exception e){
-                System.err.println(e.getMessage());
-            }
-        }
-    }
 
 }

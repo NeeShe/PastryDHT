@@ -1,4 +1,4 @@
-package model;
+package util;
 
 import java.io.Serializable;
 import java.net.InetAddress;

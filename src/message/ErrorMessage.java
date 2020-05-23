@@ -1,4 +1,4 @@
-package model;
+package message;
 
 public class ErrorMessage extends Message{
     private String msg;

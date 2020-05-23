@@ -1,4 +1,4 @@
-package model;
+package util;
 
 import java.nio.ByteBuffer;
 import java.util.Random;
@@ -44,5 +44,9 @@ public class Util {
             buf.put(bytes[i]);
         }
         return buf.getShort(0);
+    }
+
+    public static int getHexDistance(String hex1, String hex2) {
+        return Math.abs(Integer.parseInt(hex1, 16) - Integer.parseInt(hex2, 16));
     }
 }

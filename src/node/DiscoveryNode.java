@@ -1,25 +1,42 @@
 package node;
 
-import model.*;
+import message.*;
+import util.NearByNodeInfo;
+import util.NodeAddress;
+import util.Util;
 
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
+//There will be one discovery node in the system
+//Discovery node maintains information about the list of peers in the system.
+//Every time a peer join or leave the system, it notifies this Discovery Node
+//Registration Information:  - its 16 bits identifier
+//                           - the {host:port} information
+//                           - a nickname for this node
+//Discovery Node is introduced to simplify the process of discoverying the
+// first peer that will be the entry point into the system
+//In the case of an ID space collision, the discovery node notifies the peer about the
+// collision, at which point the peer will regenerate a new identifier and repeat the process
+
+//Respnsibility     - Return one random node from the set of registered nodes
+//                  - Detect collisions
 public class DiscoveryNode extends Thread {
     private Random random;
     protected int port;
-    protected Map<byte[], NodeAddress> nodes;
+    protected Map<byte[], NodeAddress> nodes;   //A list of all the peer nodes in the system
     protected ReadWriteLock readWriteLock;
 
     public DiscoveryNode(int port) {
-        random = new Random();
+        random = new Random();  //Returning a random live peer's network information when a peer joins the overlay
         this.port = port;
         nodes = new HashMap();
         readWriteLock = new ReentrantReadWriteLock();
@@ -60,7 +77,7 @@ public class DiscoveryNode extends Thread {
         try {
             //check to see if id already exists in cluster
             for (byte[] array : nodes.keySet()) {
-                if (java.util.Arrays.equals(array, id)) {
+                if (Arrays.equals(array, id)) {
                     throw new Exception("ID '" + Util.convertBytesToHex(id) + "' already exists in cluster");
                 }
             }
@@ -68,7 +85,8 @@ public class DiscoveryNode extends Thread {
             readWriteLock.readLock().unlock();
         }
 
-        //add node to cluster using id and
+        //else means the id is usable
+        //add node to cluster using id and node address
         readWriteLock.writeLock().lock();
         try {
             nodes.put(id, nodeAddress);
@@ -101,6 +119,7 @@ public class DiscoveryNode extends Thread {
             readWriteLock.readLock().unlock();
         }
     }
+
     protected void printActiveNodes() {
         readWriteLock.readLock().lock();
         try {
