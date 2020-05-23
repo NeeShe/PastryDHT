@@ -1,5 +1,6 @@
 package node;
 
+import javafx.scene.Node;
 import message.*;
 import routing.LeafSet;
 import routing.RoutingTable;
@@ -27,6 +28,7 @@ public class PastryNode extends Thread{
     public byte[] nodeID;
     public String idStr;
     public String name;
+    public NodeAddress address;
     public LeafSet leafSet;
     public RoutingTable routingTable;
     public ReadWriteLock readWriteLock;
@@ -37,6 +39,7 @@ public class PastryNode extends Thread{
         this.discoveryNodePort = discoveryNodePort;
         this.nodeID = id;
         this.idStr = Util.convertBytesToHex(this.nodeID);
+        this.address = new NodeAddress(this.name, null, this.port);
         this.leafSet = new LeafSet(this.nodeID, this.leafSize);
         this.routingTable = new RoutingTable();
         this.readWriteLock = new ReentrantReadWriteLock();

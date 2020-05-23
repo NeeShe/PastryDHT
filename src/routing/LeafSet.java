@@ -6,12 +6,13 @@ import util.NodeAddress;
 import java.util.*;
 import java.util.concurrent.locks.ReadWriteLock;
 
+import static util.Util.convertBytesToHex;
 import static util.Util.convertBytesToShort;
 
 public class LeafSet {
     private int leafSize;
-    private SortedMap<byte[], NodeAddress> leftSet;
-    private SortedMap<byte[], NodeAddress> rightSet;
+    public SortedMap<byte[], NodeAddress> leftSet;
+    public SortedMap<byte[], NodeAddress> rightSet;
 
     public LeafSet(byte[] id, int leafSize) {
         this.leafSize = leafSize;
@@ -120,5 +121,60 @@ public class LeafSet {
             node.readWriteLock.writeLock().unlock();
         }
         return true;
+    }
+
+    public void print(PastryNode node) {
+        node.readWriteLock.readLock().lock();
+        try{
+            StringBuilder stringBuilder = new StringBuilder("---------------------------LeafSet-------------------------");
+            for(byte[] id : node.leafSet.leftSet.keySet()) {
+                NodeAddress addr = node.leafSet.leftSet.get(id);
+                stringBuilder.append(convertBytesToHex(id) + " : " + convertBytesToShort(id) + " - " + addr);
+            }
+            stringBuilder.append(convertBytesToHex(node.nodeID) + " : " + convertBytesToShort(node.nodeID) + " - " + node.port);
+            for(byte[] id : node.leafSet.rightSet.keySet()) {
+                NodeAddress addr = node.leafSet.rightSet.get(id);
+                stringBuilder.append(convertBytesToHex(id) + " : " + convertBytesToShort(id) + " - " + addr);
+            }
+            stringBuilder.append("/n--------------------------------");
+            System.out.println(stringBuilder.toString());
+        } finally {
+            node.readWriteLock.readLock().unlock();
+        }
+    }
+
+    public NodeAddress searchClosest(PastryNode node, byte[] searchId) {
+        node.readWriteLock.readLock().lock();
+        try{
+            short idInShort = convertBytesToShort(node.nodeID);
+            short searchIdInShort = convertBytesToShort(searchId);
+            short closest = searchIdInShort;
+            NodeAddress closestAddr = node.address;
+            int closestDist = Math.min(getDistance(searchIdInShort, idInShort), getDistance(idInShort, searchIdInShort));
+
+            for(byte[] id : leftSet.keySet()) {
+                short cur = convertBytesToShort(id);
+                int dist = Math.min(getDistance(searchIdInShort, cur), getDistance(cur, searchIdInShort));
+                if(dist < closestDist || (dist == closestDist && closest < cur)) {
+                    closest = cur;
+                    closestDist = dist;
+                    closestAddr = leftSet.get(id);
+                }
+            }
+
+            for(byte[] id : rightSet.keySet()) {
+                short cur = convertBytesToShort(id);
+                int dist = Math.min(getDistance(searchIdInShort, cur), getDistance(cur, searchIdInShort));
+                if(dist < closestDist || (dist == closestDist && closest < cur)) {
+                    closest = cur;
+                    closestDist = dist;
+                    closestAddr = rightSet.get(id);
+                }
+            }
+
+            return closestAddr;
+        } finally {
+            node.readWriteLock.readLock().unlock();
+        }
     }
 }
