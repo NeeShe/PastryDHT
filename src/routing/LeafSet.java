@@ -2,6 +2,7 @@ package routing;
 
 import node.PastryNode;
 import util.NodeAddress;
+import util.Util;
 
 import java.util.*;
 import java.util.concurrent.locks.ReadWriteLock;
@@ -13,6 +14,7 @@ public class LeafSet {
     private int leafSize;
     public SortedMap<byte[], NodeAddress> leftSet;
     public SortedMap<byte[], NodeAddress> rightSet;
+    public static int MAX_LEAF_SET_SIZE = 1;
 
     public LeafSet(byte[] id, int leafSize) {
         this.leafSize = leafSize;
@@ -43,9 +45,9 @@ public class LeafSet {
                         int dist1 = getDistance(idInShort, convertBytesToShort(id1));
                         int dist2 = getDistance(idInShort, convertBytesToShort(id2));
 
-                        if(dist1 < dist2) {
+                        if(dist1 > dist2) {
                             return 1;
-                        } else if(dist1 > dist2) {
+                        } else if(dist1 < dist2) {
                             return -1;
                         } else {
                             return 0;
@@ -66,7 +68,6 @@ public class LeafSet {
     }
 
     public Map<byte[], NodeAddress> get(PastryNode node) {
-        System.out.println("Getting the leaf set of node " + node.nodeID);
         node.readWriteLock.readLock().lock();
         try {
             Map<byte[], NodeAddress> leafSet = new HashMap<>();
@@ -80,7 +81,7 @@ public class LeafSet {
     }
 
     public boolean addNewNode(PastryNode node, byte[] newId, NodeAddress newAddress) {
-        System.out.println("Updating the leaf set of node " + node.nodeID);
+        System.out.println("Updating the leaf set of node ");
         node.readWriteLock.writeLock().lock();
         try{
             //If the new node's id is equal to the current node's id
@@ -97,8 +98,9 @@ public class LeafSet {
                     return false;
                 }
             }
-            if(leftSet.size() < this.leafSize) {
-                leftSet.put(newId, newAddress);
+            //neetha: added additional condition
+            if(leftSet.size() < this.leafSize ) {
+                if(newIdInShort < idInShort){leftSet.put(newId, newAddress);}
             } else if(getDistance(newIdInShort, idInShort) < getDistance(convertBytesToShort(leftSet.firstKey()), idInShort)) {
                 leftSet.remove(leftSet.firstKey());
                 leftSet.put(newId, newAddress);
@@ -111,13 +113,17 @@ public class LeafSet {
                     return false;
                 }
             }
+            //neetha: added additional condition
             if(rightSet.size() < this.leafSize) {
-                rightSet.put(newId, newAddress);
+                if(newIdInShort > idInShort){rightSet.put(newId, newAddress);}
             } else if(getDistance(idInShort, newIdInShort) < getDistance(idInShort, convertBytesToShort(rightSet.firstKey()))) {
                 rightSet.remove(rightSet.firstKey());
                 rightSet.put(newId, newAddress);
             }
-        } finally {
+        } catch(Exception e){
+            System.out.println("DEBUG: exception area2");
+            e.printStackTrace();
+        }finally {
             node.readWriteLock.writeLock().unlock();
         }
         return true;
@@ -126,18 +132,18 @@ public class LeafSet {
     public void print(PastryNode node) {
         node.readWriteLock.readLock().lock();
         try{
-            StringBuilder stringBuilder = new StringBuilder("---------------------------LeafSet-------------------------");
+            System.out.println("---------------------------LeafSet-------------------------");
+            System.out.println("LEFT SET");
             for(byte[] id : node.leafSet.leftSet.keySet()) {
                 NodeAddress addr = node.leafSet.leftSet.get(id);
-                stringBuilder.append(convertBytesToHex(id) + " : " + convertBytesToShort(id) + " - " + addr);
+                System.out.println(convertBytesToHex(id) + " : " + addr);
             }
-            stringBuilder.append(convertBytesToHex(node.nodeID) + " : " + convertBytesToShort(node.nodeID) + " - " + node.port);
+            //stringBuilder.append(convertBytesToHex(node.nodeID) + " : " + convertBytesToShort(node.nodeID) + " - " + node.port);
+            System.out.println("RIGHT SET");
             for(byte[] id : node.leafSet.rightSet.keySet()) {
                 NodeAddress addr = node.leafSet.rightSet.get(id);
-                stringBuilder.append(convertBytesToHex(id) + " : " + convertBytesToShort(id) + " - " + addr);
+                System.out.println(convertBytesToHex(id) + " : " + addr);
             }
-            stringBuilder.append("/n--------------------------------");
-            System.out.println(stringBuilder.toString());
         } finally {
             node.readWriteLock.readLock().unlock();
         }
@@ -149,7 +155,7 @@ public class LeafSet {
             short idInShort = convertBytesToShort(node.nodeID);
             short searchIdInShort = convertBytesToShort(searchId);
             short closest = searchIdInShort;
-            NodeAddress closestAddr = node.address;
+            NodeAddress closestAddr = null; //neetha: node.address is wrong assignment (for cases where leaf sets are empty)
             int closestDist = Math.min(getDistance(searchIdInShort, idInShort), getDistance(idInShort, searchIdInShort));
 
             for(byte[] id : leftSet.keySet()) {
@@ -171,7 +177,9 @@ public class LeafSet {
                     closestAddr = rightSet.get(id);
                 }
             }
-
+            if(closestAddr == null){
+                return new NodeAddress(node.name,null,node.port);
+            }
             return closestAddr;
         } finally {
             node.readWriteLock.readLock().unlock();

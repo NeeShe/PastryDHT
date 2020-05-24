@@ -1,9 +1,9 @@
 package node;
 
-import javafx.scene.Node;
 import message.*;
 import routing.LeafSet;
 import routing.RoutingTable;
+import util.InputListner;
 import util.NearByNodeInfo;
 import util.NodeAddress;
 import util.Util;
@@ -14,7 +14,6 @@ import java.io.ObjectOutputStream;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
@@ -34,6 +33,7 @@ public class PastryNode extends Thread{
     public ReadWriteLock readWriteLock;
 
     public PastryNode(byte[] id, String name, int port, int discoveryNodePort) {
+
         this.name=name;
         this.port = port;
         this.discoveryNodePort = discoveryNodePort;
@@ -44,8 +44,7 @@ public class PastryNode extends Thread{
         this.routingTable = new RoutingTable();
         this.readWriteLock = new ReentrantReadWriteLock();
 
-        System.out.println("Hi Im "+name);
-        System.out.println("My id is "+idStr);
+        System.out.println("Initialized  "+name+": with id:"+idStr);
     }
 
 
@@ -57,7 +56,7 @@ public class PastryNode extends Thread{
             //register the nodeID into the discovery node list
             boolean success = false;
             while(!success) {
-                System.out.println("Registering ID '" + Util.convertBytesToHex(nodeID) + "' to '" + discoveryNodePort + "'");
+                System.out.println("Registering ID '" + Util.convertBytesToHex(nodeID) + "' to Discovery Node at '" + discoveryNodePort + "'");
                 this.discoveryNodeAddress = InetAddress.getLocalHost();
                 Socket discoveryNodeSocket = new Socket(discoveryNodeAddress, discoveryNodePort);
                 RegisterMessage registerNodeMsg = new RegisterMessage(name, nodeID, serverSocket.getInetAddress(), port);
@@ -72,13 +71,14 @@ public class PastryNode extends Thread{
                 switch(replyMsg.getMsgType()) {
                     case Message.NEARBY_NODE_INFO_MSG:
                         NearByNodeInfo nodeInfoMsg = (NearByNodeInfo) replyMsg;
-                        System.out.println("Sending node join message to '" + nodeInfoMsg.getNodeAddress().getInetAddress() + ":" + nodeInfoMsg.getNodeAddress().getPort() + "'");
+                        System.out.println("Sending Node join message to '" + nodeInfoMsg.getNodeAddress().getInetAddress() + ":" + nodeInfoMsg.getNodeAddress().getPort() + "'");
                         //send node join message
                         this.sendJoinRequest(nodeInfoMsg);
                         success = true;
                         break;
                     case Message.SUCCESS_MSG:
                             //if you're the first node registering a success messasge is sent back
+                            System.out.println("First Node in the overlay network");
                             success = true;
                             break;
                     case Message.ERROR_MSG:
@@ -92,7 +92,7 @@ public class PastryNode extends Thread{
             }
             //now start listening to incoming requests
             while(true) {
-                System.out.println("Waiting for requests");
+                System.out.println("Waiting for requests in the main thread");
                 Socket socket = serverSocket.accept();
                 System.out.println("Received connection from '" + socket.getInetAddress() + ":" + socket.getPort() + "'.");
                new Thread(new PastryNodeWorker(socket, this)).start();
@@ -124,13 +124,17 @@ public class PastryNode extends Thread{
             int port = Integer.parseInt(args[1]);
             int discoveryNodePort = Integer.parseInt(args[2]);
             byte[] id= (args.length == 4) ? Util.convertHexToBytes(args[3]) : Util.generateRandomID(ID_BYTES);
-            new Thread(new PastryNode(id, name, port, discoveryNodePort)).start();
+            PastryNode node = new PastryNode(id, name, port, discoveryNodePort);
+            new Thread(node).start();
+            //neetha: start a scanner thread so that we can issue commands when the program is running
+//TODO
+            //use this to implement put and get functionalities
+            InputListner inputListner = new InputListner(node);
+            inputListner.start();
         } catch(Exception e) {
             System.err.println(e.getMessage());
             System.out.println("Usage: node.PastryNode port discoveryNodePort [id]");
         }
     }
-
-
-
 }
+
