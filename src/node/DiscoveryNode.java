@@ -57,13 +57,13 @@ public class DiscoveryNode extends Thread {
     public void run() {
         try {
             ServerSocket serverSocket = new ServerSocket(port);
-            System.out.println("discovery node started successfully on port " + port);
+            System.out.println("Discovery node started successfully on port " + port);
 
             //accept connections
             while (true) {
                 Socket socket = serverSocket.accept();
                 System.out.println("Received connection from '" + socket.getInetAddress() + ":" + socket.getPort() + "'.");
-                System.out.println("Starting a worker thread");
+                //System.out.println("Starting a worker thread");
                 new Thread(new DiscoveryNodeWorker(socket)).start();
             }
         } catch (Exception e) {

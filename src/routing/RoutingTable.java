@@ -3,7 +3,6 @@ package routing;
 import node.PastryNode;
 import util.NodeAddress;
 
-import javax.xml.soap.Node;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -18,20 +17,21 @@ import static util.Util.*;
 //Hence, based on our 16 bits id, there are 16/4 = 4 rows
 public class RoutingTable {
     private List<Map<String, NodeAddress>> routingTable;    //each element of the table list is a row of (id, addr) pairs
-    private final int tableSize = 4;
+    public final int tableSize = 4;
 
     public RoutingTable() {
         this.routingTable = new ArrayList<>(tableSize);
-        for(Map<String, NodeAddress> map : routingTable) {
-            map = new HashMap<>();
+        for(int i=0; i<tableSize; i++){
+            Map<String, NodeAddress> map = new HashMap<>();
+            routingTable.add(i,map);
         }
     }
 
     public Map<String, NodeAddress> get(PastryNode node, int prefixLen) {
         node.readWriteLock.readLock().lock();
         try{
-            return routingTable.get(prefixLen);
-        } finally {
+            return this.routingTable.get(prefixLen);
+        }finally {
             node.readWriteLock.readLock().unlock();
         }
     }
@@ -55,46 +55,38 @@ public class RoutingTable {
     public void print(PastryNode node) {
         node.readWriteLock.readLock().lock();
         try{
-            StringBuilder stringBuilder = new StringBuilder("------------------------Routing Table----------------------");
+            System.out.println("------------------------Routing Table----------------------");
             int i = 0;
             for(Map<String, NodeAddress> map : routingTable) {
-                stringBuilder.append("\n prefix length = " + i);
+                System.out.println("\nprefix length = " + i+":");
                 for(String id : map.keySet()) {
-                    stringBuilder.append("\n\t" + id + " : " + map.get(id));
+                    System.out.print("\t" + id + " : " + map.get(id));
                 }
                 i++;
             }
-            stringBuilder.append("/n--------------------------------");
-            System.out.println(stringBuilder.toString());
         } finally {
             node.readWriteLock.readLock().unlock();
         }
     }
 
     public NodeAddress searchExact(PastryNode node, byte[] id, int rowIndex) {
-        System.out.println("Inside RoutingTable.java searching for exact match");
         node.readWriteLock.readLock().lock();
         try{
             String idStr = convertBytesToHex(id).substring(rowIndex, rowIndex + 1);
-            System.out.println("Got exact match result inside RoutingTable.java as " + idStr + " and now will return");
+            //if found returns else goes to finally block and releases lock
             return routingTable.get(rowIndex).get(idStr);
         } finally {
-            System.out.println("Unlocking");
             node.readWriteLock.readLock().unlock();
-            System.out.println("Unlocked");
         }
     }
 
     public NodeAddress searchClosest(PastryNode node, byte[] searchId, int prefixLen) {
-        System.out.println("will now lock closest search");
         node.readWriteLock.readLock().lock();
         try {
-            System.out.println("Inside RoutingTable.java searching for closest match");
             String searchIdStr = convertBytesToHex(searchId);
             short closest = (short)Integer.parseInt(node.idStr.substring(prefixLen, prefixLen+1));
             int closestDist = getHexDistance(node.idStr.substring(prefixLen, prefixLen+1), searchIdStr.substring(prefixLen, prefixLen+1));
-            NodeAddress closestAddr = node.address;
-            String idStr = convertBytesToHex(searchId);
+            NodeAddress closestAddr = null; //neetha: node.address is wrong assignment.
             for(String id : routingTable.get(prefixLen).keySet()) {
                 short cur = (short)Integer.parseInt(id);
                 int dist = getHexDistance(id.substring(prefixLen, prefixLen+1), searchIdStr.substring(prefixLen, prefixLen+1));
@@ -105,8 +97,13 @@ public class RoutingTable {
                 }
             }
             return closestAddr;
+        } catch(Exception e){
+            System.err.println("DEBUG: FIX THIS IF REACHED");
+            e.printStackTrace();
+            return null;
         } finally {
             node.readWriteLock.readLock().unlock();
         }
+
     }
 }
