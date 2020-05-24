@@ -84,11 +84,11 @@ public class RoutingTable {
         node.readWriteLock.readLock().lock();
         try {
             String searchIdStr = convertBytesToHex(searchId);
-            short closest = (short)Integer.parseInt(node.idStr.substring(prefixLen, prefixLen+1));
+            short closest = (short)Integer.parseInt(node.idStr.substring(prefixLen, prefixLen+1), 16);
             int closestDist = getHexDistance(node.idStr.substring(prefixLen, prefixLen+1), searchIdStr.substring(prefixLen, prefixLen+1));
             NodeAddress closestAddr = null; //neetha: node.address is wrong assignment.
             for(String id : routingTable.get(prefixLen).keySet()) {
-                short cur = (short)Integer.parseInt(id);
+                short cur = (short)Integer.parseInt(id, 16);
                 int dist = getHexDistance(id.substring(prefixLen, prefixLen+1), searchIdStr.substring(prefixLen, prefixLen+1));
                 if(dist < closestDist ||(dist == closestDist && cur < closest)) {
                     closest = cur;
