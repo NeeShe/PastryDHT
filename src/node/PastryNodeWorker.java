@@ -91,13 +91,18 @@ public class PastryNodeWorker extends Thread{
             joinNodeSocket = new Socket(nodeJoinMsg.getNodeAddress().getInetAddress(), nodeJoinMsg.getNodeAddress().getPort());
             ObjectOutputStream joinNodeOut = new ObjectOutputStream(joinNodeSocket.getOutputStream());
             joinNodeOut.writeObject(
-                        new RoutingInfoMsg(this.node.leafSet.get(this.node), p, this.node.routingTable.get(this.node, p),
+                        new RoutingInfoMsg(this.node.leafSet.get(this.node), this.node.neighborhoodSet.get(this.node),p, this.node.routingTable.get(this.node, p),
                                 nodeAddress.getInetAddress() == null
                                 //last routing info message received by the joining node
                                 //notice that broadcastMsg will be true for only one node which is closest
                         )
                 );
                 joinNodeSocket.close();
+                //neetha: add it to neighborset if the node contacted this node first
+                if(nodeJoinMsg.getHopsSize() == 1){
+                    this.node.neighborhoodSet.addNewNode(node,nodeJoinMsg.getID(),nodeJoinMsg.getNodeAddress());
+                }
+
                 //neetha: after fixing searchClosest in leafset and routing table, unexpected entry inside this if condition is resolved
                 //without that fix NodeC was forwarding message to NodeC
                 //if we found a closer node forward the node join message
@@ -112,7 +117,7 @@ public class PastryNodeWorker extends Thread{
 
         }catch(Exception e){
             System.out.println("DEBUG: Exception area 1");
-            System.err.println(e.getMessage());
+            e.printStackTrace();
         }
     }
     //method to handle incoming routing information message
@@ -154,6 +159,10 @@ public class PastryNodeWorker extends Thread{
             changed = this.node.routingTable.addNewNode(node,entry.getKey(), entry.getValue(), routingInfoMsg.getPrefixLength()) || changed;
         }
 
+        //update neighbourhoodSet based on neighbourset info
+        for(Map.Entry<byte[],NodeAddress> entry: routingInfoMsg.getNeighborSet().entrySet()){
+            changed = this.node.neighborhoodSet.addNewNode(node,entry.getKey(),entry.getValue()) || changed;
+        }
         //print out leaf set and routing table. (if at least one entry in leaf set or routing table changed)
         //neetha: not printing here as the print does not work in multiple thread. CHeck locks
 //        if(changed) {
@@ -187,11 +196,11 @@ public class PastryNodeWorker extends Thread{
                     //send routing update
                     Socket nodeSocket = new Socket(entry.getValue().getInetAddress(), entry.getValue().getPort());
                     ObjectOutputStream nodeOut = new ObjectOutputStream(nodeSocket.getOutputStream());
-                    nodeOut.writeObject(new RoutingInfoMsg(this.node.leafSet.get(this.node), i, this.node.routingTable.get(this.node,i), false));
+                    nodeOut.writeObject(new RoutingInfoMsg(this.node.leafSet.get(this.node), this.node.neighborhoodSet.get(this.node),i, this.node.routingTable.get(this.node,i), false));
                     nodeSocket.close();
                 }
 
-                //send to greater than leaf set
+                //send to right leaf set
                 for(Map.Entry<byte[],NodeAddress> entry : node.leafSet.rightSet.entrySet()) {
                     if(nodeBlacklist.contains(entry.getValue())) {
                         continue;
@@ -211,11 +220,11 @@ public class PastryNodeWorker extends Thread{
                     //send routing update
                     Socket nodeSocket = new Socket(entry.getValue().getInetAddress(), entry.getValue().getPort());
                     ObjectOutputStream nodeOut = new ObjectOutputStream(nodeSocket.getOutputStream());
-                    nodeOut.writeObject(new RoutingInfoMsg(this.node.leafSet.get(this.node), i, this.node.routingTable.get(this.node,i), false));
+                    nodeOut.writeObject(new RoutingInfoMsg(this.node.leafSet.get(this.node),this.node.neighborhoodSet.get(this.node), i, this.node.routingTable.get(this.node,i), false));
                     nodeSocket.close();
                 }
 
-                //send to routing table
+                //send to routing table nodes
                 for(int i=0; i< node.routingTable.tableSize; i++) {
                     Map<String,NodeAddress> map = this.node.routingTable.get(this.node,i);
                     for(Map.Entry<String,NodeAddress> entry : map.entrySet()) {
@@ -227,9 +236,33 @@ public class PastryNodeWorker extends Thread{
 
                         Socket nodeSocket = new Socket(entry.getValue().getInetAddress(), entry.getValue().getPort());
                         ObjectOutputStream nodeOut = new ObjectOutputStream(nodeSocket.getOutputStream());
-                        nodeOut.writeObject(new RoutingInfoMsg(this.node.leafSet.get(this.node), i, map, false));
+                        nodeOut.writeObject(new RoutingInfoMsg(this.node.leafSet.get(this.node), this.node.neighborhoodSet.get(this.node),i, map, false));
                         nodeSocket.close();
                     }
+                }
+                //send to neighbouring nodes
+                //send to right leaf set
+                for(Map.Entry<byte[],NodeAddress> entry : node.neighborhoodSet.neighborSet.entrySet()) {
+                    if(nodeBlacklist.contains(entry.getValue())) {
+                        continue;
+                    } else {
+                        nodeBlacklist.add(entry.getValue());
+                    }
+
+                    //find longest prefix match for routing info
+                    String nodeIDStr = Util.convertBytesToHex(entry.getKey());
+                    int i=0;
+                    for(i=0; i<4; i++) {
+                        if(node.idStr.charAt(i) != nodeIDStr.charAt(i)) {
+                            break;
+                        }
+                    }
+
+                    //send routing update
+                    Socket nodeSocket = new Socket(entry.getValue().getInetAddress(), entry.getValue().getPort());
+                    ObjectOutputStream nodeOut = new ObjectOutputStream(nodeSocket.getOutputStream());
+                    nodeOut.writeObject(new RoutingInfoMsg(this.node.leafSet.get(this.node),this.node.neighborhoodSet.get(this.node), i, this.node.routingTable.get(this.node,i), false));
+                    nodeSocket.close();
                 }
             }
 //TODO
