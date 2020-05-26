@@ -14,7 +14,6 @@ public class LeafSet {
     private int leafSize;
     public SortedMap<byte[], NodeAddress> leftSet;
     public SortedMap<byte[], NodeAddress> rightSet;
-    public static int MAX_LEAF_SET_SIZE = 1;
 
     public LeafSet(byte[] id, int leafSize) {
         this.leafSize = leafSize;

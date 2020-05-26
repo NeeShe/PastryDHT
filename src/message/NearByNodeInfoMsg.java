@@ -1,12 +1,13 @@
-package util;
+package message;
 
 import message.Message;
+import util.NodeAddress;
 
-public class NearByNodeInfo extends Message {
+public class NearByNodeInfoMsg extends Message {
     private byte[] id;
     private NodeAddress nodeAddress;
 
-    public NearByNodeInfo(byte[] id, NodeAddress nodeAddress) {
+    public NearByNodeInfoMsg(byte[] id, NodeAddress nodeAddress) {
         this.id = id;
         this.nodeAddress = nodeAddress;
     }
