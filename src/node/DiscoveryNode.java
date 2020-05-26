@@ -1,7 +1,7 @@
 package node;
 
 import message.*;
-import util.NearByNodeInfo;
+import message.NearByNodeInfoMsg;
 import util.NodeAddress;
 import util.Util;
 
@@ -160,7 +160,7 @@ public class DiscoveryNode extends Thread {
                             } else {
                                 readWriteLock.readLock().lock();
                                 try {
-                                    replyMsg = new NearByNodeInfo(id, nodes.get(id));
+                                    replyMsg = new NearByNodeInfoMsg(id, nodes.get(id));
                                 } finally {
                                     readWriteLock.readLock().unlock();
                                 }
@@ -183,7 +183,7 @@ public class DiscoveryNode extends Thread {
                             } else {
                                 readWriteLock.readLock().lock();
                                 try {
-                                    replyMsg = new NearByNodeInfo(id, nodes.get(id));
+                                    replyMsg = new NearByNodeInfoMsg(id, nodes.get(id));
                                 } finally {
                                     readWriteLock.readLock().unlock();
                                 }

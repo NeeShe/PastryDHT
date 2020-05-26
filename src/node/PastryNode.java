@@ -2,9 +2,10 @@ package node;
 
 import message.*;
 import routing.LeafSet;
+import routing.NeighborhoodSet;
 import routing.RoutingTable;
 import util.InputListner;
-import util.NearByNodeInfo;
+import message.NearByNodeInfoMsg;
 import util.NodeAddress;
 import util.Util;
 
@@ -21,6 +22,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 public class PastryNode extends Thread{
     public static final int ID_BYTES = 2;
     public static final int leafSize = 1;
+    public static final int NEIGHBOR_SIZE = 2;
     public int port;
     public int discoveryNodePort;
     public InetAddress discoveryNodeAddress;
@@ -29,6 +31,7 @@ public class PastryNode extends Thread{
     public String name;
     public NodeAddress address;
     public LeafSet leafSet;
+    public NeighborhoodSet neighborhoodSet;
     public RoutingTable routingTable;
     public ReadWriteLock readWriteLock;
 
@@ -41,6 +44,7 @@ public class PastryNode extends Thread{
         this.idStr = Util.convertBytesToHex(this.nodeID);
         this.address = new NodeAddress(this.name, null, this.port);
         this.leafSet = new LeafSet(this.nodeID, this.leafSize);
+        this.neighborhoodSet = new NeighborhoodSet(this.nodeID,this.NEIGHBOR_SIZE);
         this.routingTable = new RoutingTable();
         this.readWriteLock = new ReentrantReadWriteLock();
 
@@ -70,9 +74,10 @@ public class PastryNode extends Thread{
                 //perform action on reply message
                 switch(replyMsg.getMsgType()) {
                     case Message.NEARBY_NODE_INFO_MSG:
-                        NearByNodeInfo nodeInfoMsg = (NearByNodeInfo) replyMsg;
+                        NearByNodeInfoMsg nodeInfoMsg = (NearByNodeInfoMsg) replyMsg;
                         System.out.println("Sending Node join message to '" + nodeInfoMsg.getNodeAddress().getInetAddress() + ":" + nodeInfoMsg.getNodeAddress().getPort() + "'");
                         //send node join message
+                        this.neighborhoodSet.addNewNode(this,nodeInfoMsg.getID(),nodeInfoMsg.getNodeAddress());
                         this.sendJoinRequest(nodeInfoMsg);
                         success = true;
                         break;
@@ -103,7 +108,7 @@ public class PastryNode extends Thread{
         }
     }
 
-    private void sendJoinRequest(NearByNodeInfo nodeInfoMsg) {
+    private void sendJoinRequest(NearByNodeInfoMsg nodeInfoMsg) {
         NodeJoinMessage nodeJoinMsg = new NodeJoinMessage(nodeID, 0, new NodeAddress(name, null, port));
         nodeJoinMsg.addHop(nodeInfoMsg.getNodeAddress());
         Socket nodeSocket = null;
