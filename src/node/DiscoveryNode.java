@@ -38,7 +38,7 @@ public class DiscoveryNode extends Thread {
     public DiscoveryNode(int port) {
         random = new Random();  //Returning a random live peer's network information when a peer joins the overlay
         this.port = port;
-        nodes = new HashMap();
+        nodes = new HashMap<>();
         readWriteLock = new ReentrantReadWriteLock();
     }
 

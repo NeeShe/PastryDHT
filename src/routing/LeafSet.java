@@ -20,7 +20,7 @@ public class LeafSet {
         this.leafSize = leafSize;
         short idInShort = convertBytesToShort(id);
 
-        leftSet = new TreeMap(
+        leftSet = new TreeMap<>(
                 new Comparator<byte[]>() {
                     @Override
                     public int compare(byte[] id1, byte[] id2) {
