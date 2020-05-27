@@ -4,6 +4,7 @@ import node.PastryNode;
 import util.NodeAddress;
 import util.Util;
 
+import java.net.InetAddress;
 import java.util.*;
 import java.util.concurrent.locks.ReadWriteLock;
 
@@ -17,14 +18,14 @@ public class LeafSet {
 
     public LeafSet(byte[] id, int leafSize) {
         this.leafSize = leafSize;
-        short idInShort = convertBytesToShort(id);
-
+       // short idInShort = convertBytesToShort(id);
+        String idInHex= convertBytesToHex(id);
         leftSet = new TreeMap<>(
                 new Comparator<byte[]>() {
                     @Override
                     public int compare(byte[] id1, byte[] id2) {
-                        int dist1 = getDistance(convertBytesToShort(id1), idInShort);
-                        int dist2 = getDistance(convertBytesToShort(id2), idInShort);
+                        int dist1 = getDistance(convertBytesToHex(id1), idInHex);
+                        int dist2 = getDistance(convertBytesToHex(id2), idInHex);
 
                         if(dist1 < dist2) {
                             return 1;
@@ -41,8 +42,8 @@ public class LeafSet {
                 new Comparator<byte[]>() {
                     @Override
                     public int compare(byte[] id1, byte[] id2) {
-                        int dist1 = getDistance(idInShort, convertBytesToShort(id1));
-                        int dist2 = getDistance(idInShort, convertBytesToShort(id2));
+                        int dist1 = getDistance(idInHex, convertBytesToHex(id1));
+                        int dist2 = getDistance(idInHex, convertBytesToHex(id2));
 
                         if(dist1 > dist2) {
                             return 1;
@@ -55,9 +56,23 @@ public class LeafSet {
                 }
         );
     }
+/* Do not remove until end
 
-    private int getDistance(short id1, short id2) {
+ */
+//    private int getDistance(short id1, short id2) {
+//        int dist = 0;
+//        if(id1 < id2) {
+//            dist = Math.abs(id2 - id1);
+//        } else if(id1 > id2) {
+//            dist = Math.abs(Short.MAX_VALUE - id1) + Math.abs(id2 - Short.MIN_VALUE);
+//        }
+//        return dist;
+//    }
+
+    private int getDistance(String hex1, String hex2) {
         int dist = 0;
+        int id1 = Integer.parseInt(hex1, 16);
+        int id2 = Integer.parseInt(hex2, 16);
         if(id1 < id2) {
             dist = Math.abs(id2 - id1);
         } else if(id1 > id2) {
@@ -88,8 +103,11 @@ public class LeafSet {
                 return false;
             }
 
-            short idInShort = convertBytesToShort(node.nodeID);
-            short newIdInShort = convertBytesToShort(newId);
+            String idInHex = convertBytesToHex(node.nodeID);
+            String newIdInHex = convertBytesToHex(newId);
+
+            int idInInt = Integer.parseInt(idInHex,16);
+            int newIdInInt = Integer.parseInt(newIdInHex,16);
 
             //If the new node's id is equal to one of the node's id in LEFT leaf set
             for(byte[] id : this.leftSet.keySet()) {
@@ -99,8 +117,8 @@ public class LeafSet {
             }
             //neetha: added additional condition
             if(leftSet.size() < this.leafSize ) {
-                if(newIdInShort < idInShort){leftSet.put(newId, newAddress);}
-            } else if(getDistance(newIdInShort, idInShort) < getDistance(convertBytesToShort(leftSet.firstKey()), idInShort)) {
+                if(newIdInInt < idInInt){leftSet.put(newId, newAddress);}
+            } else if(getDistance(newIdInHex, idInHex) < getDistance(convertBytesToHex(leftSet.firstKey()), idInHex)) {
                 leftSet.remove(leftSet.firstKey());
                 leftSet.put(newId, newAddress);
             }
@@ -114,8 +132,8 @@ public class LeafSet {
             }
             //neetha: added additional condition
             if(rightSet.size() < this.leafSize) {
-                if(newIdInShort > idInShort){rightSet.put(newId, newAddress);}
-            } else if(getDistance(idInShort, newIdInShort) < getDistance(idInShort, convertBytesToShort(rightSet.firstKey()))) {
+                if(newIdInInt > idInInt){rightSet.put(newId, newAddress);}
+            } else if(getDistance(idInHex, newIdInHex) < getDistance(idInHex, convertBytesToHex(rightSet.firstKey()))) {
                 rightSet.remove(rightSet.firstKey());
                 rightSet.put(newId, newAddress);
             }
@@ -151,17 +169,20 @@ public class LeafSet {
     public NodeAddress searchClosest(PastryNode node, byte[] searchId) {
         node.readWriteLock.readLock().lock();
         try{
-            short idInShort = convertBytesToShort(node.nodeID);
-            short searchIdInShort = convertBytesToShort(searchId);
-            short closest = searchIdInShort;
-            NodeAddress closestAddr = null; //neetha: node.address is wrong assignment (for cases where leaf sets are empty)
-            int closestDist = Math.min(getDistance(searchIdInShort, idInShort), getDistance(idInShort, searchIdInShort));
+            String idInHex = convertBytesToHex(node.nodeID);
+            String searchIdInHex = convertBytesToHex(searchId);
+            int idInInt = Integer.parseInt(idInHex,16);
+            int searchIdInInt = Integer.parseInt(searchIdInHex,16);
+            NodeAddress closestAddr = null;
+            int closestDist = Math.min(getDistance(searchIdInHex, idInHex),getDistance(idInHex,searchIdInHex));
+            int closest =searchIdInInt;
 
             for(byte[] id : leftSet.keySet()) {
-                short cur = convertBytesToShort(id);
-                int dist = Math.min(getDistance(searchIdInShort, cur), getDistance(cur, searchIdInShort));
-                if(dist < closestDist || (dist == closestDist && closest < cur)) {
-                    closest = cur;
+                String curInHex = convertBytesToHex(id);
+                int curInInt = Integer.parseInt(curInHex,16);
+                int dist = Math.min(getDistance(searchIdInHex,curInHex),getDistance(curInHex,searchIdInHex));
+                if(dist < closestDist || (dist == closestDist && closest < curInInt)) {
+                    closest = curInInt;
                     closestDist = dist;
                     closestAddr = leftSet.get(id);
                     System.out.println("Found in left set");
@@ -169,10 +190,11 @@ public class LeafSet {
             }
 
             for(byte[] id : rightSet.keySet()) {
-                short cur = convertBytesToShort(id);
-                int dist = Math.min(getDistance(searchIdInShort, cur), getDistance(cur, searchIdInShort));
-                if(dist < closestDist || (dist == closestDist && closest < cur)) {
-                    closest = cur;
+                String curInHex = convertBytesToHex(id);
+                int curInInt = Integer.parseInt(curInHex,16);
+                int dist = Math.min(getDistance(searchIdInHex, curInHex), getDistance(curInHex, searchIdInHex));
+                if(dist < closestDist || (dist == closestDist && closest > curInInt)) {
+                    closest = curInInt;
                     closestDist = dist;
                     closestAddr = rightSet.get(id);
                     System.out.println("Found in right set");
