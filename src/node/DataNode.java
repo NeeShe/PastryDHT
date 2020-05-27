@@ -59,7 +59,7 @@ public class DataNode {
                     //store in new data
                     System.out.print("Data Id (or leave blank to auto-generate: ");
                     String idStr = scn.nextLine();
-                    if(opType.equalsIgnoreCase("S")) {
+                    if(opType.equalsIgnoreCase("W")) {
                         System.out.print("New Data Content: ");
                         String content = scn.nextLine();
                         data = content.getBytes();
