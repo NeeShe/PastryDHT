@@ -15,13 +15,13 @@ public class NeighborhoodSet {
 
     public NeighborhoodSet(byte[] id, int neighborSize) {
         this.neighborSize = neighborSize;
-        short idInShort = convertBytesToShort(id);
-        neighborSet = new TreeMap<>(
+        String idInHex = convertBytesToHex(id);
+        neighborSet = new TreeMap(
                 new Comparator<byte[]>() {
                     @Override
                     public int compare(byte[] id1, byte[] id2) {
-                        int dist1 = getDistance(convertBytesToShort(id1), idInShort);
-                        int dist2 = getDistance(convertBytesToShort(id2), idInShort);
+                        int dist1 = getDistance(convertBytesToHex(id1), idInHex);
+                        int dist2 = getDistance(convertBytesToHex(id2), idInHex);
 
                         if(dist1 < dist2) {
                             return 1;
@@ -35,8 +35,20 @@ public class NeighborhoodSet {
         );
     }
 
-    private int getDistance(short id1, short id2) {
+//    private int getDistance(short id1, short id2) {
+//        int dist = 0;
+//        if(id1 < id2) {
+//            dist = Math.abs(id2 - id1);
+//        } else if(id1 > id2) {
+//            dist = Math.abs(Short.MAX_VALUE - id1) + Math.abs(id2 - Short.MIN_VALUE);
+//        }
+//        return dist;
+//    }
+
+    private int getDistance(String hex1, String hex2) {
         int dist = 0;
+        int id1 = Integer.parseInt(hex1, 16);
+        int id2 = Integer.parseInt(hex2, 16);
         if(id1 < id2) {
             dist = Math.abs(id2 - id1);
         } else if(id1 > id2) {
@@ -54,8 +66,8 @@ public class NeighborhoodSet {
                 return false;
             }
 
-            short idInShort = convertBytesToShort(node.nodeID);
-            short newIdInShort = convertBytesToShort(newId);
+            String idInHex = convertBytesToHex(node.nodeID);
+            String newIdInHex = convertBytesToHex(newId);
 
             //If the new node's id is equal to one of the node's id in neighborhood set
             if(neighborSet.containsKey(newId)){
@@ -69,7 +81,7 @@ public class NeighborhoodSet {
             //if we add those nodes which are not numerically closest but geographacilly closest, we can have good coverage
             if(neighborSet.size() < this.neighborSize ) {
                 neighborSet.put(newId,newAddress);
-            } else if(getDistance(newIdInShort, idInShort) > getDistance(convertBytesToShort(neighborSet.firstKey()), idInShort)) {
+            } else if(getDistance(newIdInHex, idInHex) > getDistance(convertBytesToHex(neighborSet.firstKey()), idInHex)) {
                 neighborSet.remove(neighborSet.firstKey());
                 neighborSet.put(newId, newAddress);
             }

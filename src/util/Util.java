@@ -53,6 +53,7 @@ public class Util {
         return Integer.parseInt(str.replace("a","10").replace("b","11").replace("c","12").replace("d","13").replace("e","14").replace("f","15"));
     }
 
+
     public static int getHexDistance(String hex1, String hex2) {
         return Math.abs(Integer.parseInt(hex1, 16) - Integer.parseInt(hex2, 16));
     }
