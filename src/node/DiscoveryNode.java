@@ -96,7 +96,7 @@ public class DiscoveryNode extends Thread {
         }
     }
 
-    protected byte[] getRandomNode() throws Exception {
+    public byte[] getRandomNode() throws Exception {
         readWriteLock.readLock().lock();
         try {
             if (nodes.size() != 0) {

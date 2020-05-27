@@ -16,7 +16,7 @@ public class NeighborhoodSet {
     public NeighborhoodSet(byte[] id, int neighborSize) {
         this.neighborSize = neighborSize;
         short idInShort = convertBytesToShort(id);
-        neighborSet = new TreeMap(
+        neighborSet = new TreeMap<>(
                 new Comparator<byte[]>() {
                     @Override
                     public int compare(byte[] id1, byte[] id2) {

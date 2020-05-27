@@ -1,27 +1,27 @@
 package node;
 
-import message.Message;
-import message.NodeJoinMessage;
-import message.RoutingInfoMsg;
+import message.*;
 import util.NodeAddress;
 import util.Util;
 
-import java.io.ObjectInputStream;
-import java.io.ObjectOutputStream;
+import java.io.*;
 import java.net.Socket;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 
 import static util.Util.convertBytesToHex;
+import static util.Util.convertBytesToShort;
 
 public class PastryNodeWorker extends Thread{
     protected Socket socket;
     protected PastryNode node;
+    protected Message replyMsg;
 
     public PastryNodeWorker(Socket socket, PastryNode node) {
         this.socket  = socket;
         this.node = node;
+        this.replyMsg = null;
     }
 
     @Override
@@ -39,19 +39,32 @@ public class PastryNodeWorker extends Thread{
                 case Message.ROUTING_INFO_MSG:
                     this.routingInfoHandler(requestMsg);
                     break;
+                case Message.LOOKUP_NODE_MSG:
+                    this.lookupNodeHandler(requestMsg);
+                    break;
+                case Message.READ_DATA_MSG:
+                    this.readDataHandler(requestMsg);
+                    break;
+                case  Message.WRITE_DATA_MSG:
+                    this.writeDataHandler(requestMsg);
+                    break;
                 default:
                     System.err.println("Unrecognized request message type '" + requestMsg.getMsgType() + "'");
                     break;
             }
 
-            //write reply message
-            if(replyMsg != null) {
-                ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
-                out.writeObject(replyMsg);
-            }
         } catch(Exception e) {
             e.printStackTrace();
             System.err.println(e.getMessage());
+        } finally {
+            if(replyMsg != null) {
+                try {
+                    ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
+                    out.writeObject(replyMsg);
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
         }
     }
 
@@ -103,6 +116,7 @@ public class PastryNodeWorker extends Thread{
                     this.node.neighborhoodSet.addNewNode(node,nodeJoinMsg.getID(),nodeJoinMsg.getNodeAddress());
                 }
 
+                //TODO
                 //neetha: after fixing searchClosest in leafset and routing table, unexpected entry inside this if condition is resolved
                 //without that fix NodeC was forwarding message to NodeC
                 //if we found a closer node forward the node join message
@@ -165,6 +179,7 @@ public class PastryNodeWorker extends Thread{
         }
         //print out leaf set and routing table. (if at least one entry in leaf set or routing table changed)
         //neetha: not printing here as the print does not work in multiple thread. CHeck locks
+        //yinna: this can print correctly
 //        if(changed) {
 //            node.leafSet.print(node);
 //            node.routingTable.print(node);
@@ -174,7 +189,7 @@ public class PastryNodeWorker extends Thread{
         try {
             //if this is a message from the closest node send routing information to every node in leaf set
             if(routingInfoMsg.getBroadcastMsg()) {
-                List<NodeAddress> nodeBlacklist = new LinkedList();
+                List<NodeAddress> nodeBlacklist = new LinkedList<>();
 
                 //send to left leaf set
                 for(Map.Entry<byte[],NodeAddress> entry : node.leafSet.leftSet.entrySet()) {
@@ -316,5 +331,94 @@ public class PastryNodeWorker extends Thread{
             } finally {
             node.readWriteLock.readLock().unlock();
         }
+    }
+
+    private void lookupNodeHandler(Message requestMsg) throws IOException {
+        LookupNodeMsg lookupNodeMsg = (LookupNodeMsg)requestMsg;
+        if(lookupNodeMsg.getNodeAddress().getInetAddress() == null) {
+            lookupNodeMsg.getNodeAddress().setInetAddress(socket.getInetAddress());
+        }
+
+        System.out.println("Received look up node message '" + lookupNodeMsg.toString() + "'");
+        NodeAddress forwardAddr = null;
+
+        //check if data existed in leaf set
+        int searchId = convertBytesToShort(lookupNodeMsg.getID());
+        byte[] lsMinIdInByte = null;
+        byte[] lsMaxIdInByte = null;
+        int lsMinId = Integer.MIN_VALUE;
+        int lsMaxId = Integer.MAX_VALUE;
+        if((this.node.leafSet.leftSet.size() > 0 && this.node.leafSet.rightSet.size() > 0)) {
+            lsMinIdInByte = this.node.leafSet.leftSet.firstKey();
+            lsMaxIdInByte = this.node.leafSet.rightSet.firstKey();
+            lsMinId = convertBytesToShort(lsMinIdInByte);
+            lsMaxId = convertBytesToShort(lsMaxIdInByte);
+        }
+
+        //min < search < max || (max < min < search || search < max < min)
+        if ((this.node.leafSet.leftSet.size() > 0 && this.node.leafSet.rightSet.size() > 0) &&
+            (lsMinId < lsMaxId && lsMinId <= searchId && searchId <= lsMaxId) ||       //min=-10, id=-6, max=-4
+            (lsMinId > lsMaxId && (lsMinId <= searchId || searchId <= lsMaxId))) {    //min = 10, id = -4, max = -6
+            forwardAddr = this.node.leafSet.searchClosest(this.node, lookupNodeMsg.getID());
+        } else {
+            forwardAddr = this.node.routingTable.searchExact(this.node, lookupNodeMsg.getID(), lookupNodeMsg.getPrefixLength());
+            if (forwardAddr != null) {
+                lookupNodeMsg.setLongestPrefixMatch(lookupNodeMsg.getPrefixLength() + 1);
+            } else {
+                forwardAddr = this.node.routingTable.searchClosest(this.node, lookupNodeMsg.getID(), lookupNodeMsg.getPrefixLength());
+                if (forwardAddr == null) {
+                    forwardAddr = this.node.leafSet.searchClosest(this.node, lookupNodeMsg.getID());
+                }
+            }
+        }
+
+
+        if(forwardAddr.getInetAddress() == null) {
+            //The current node is the closest where the data should reside in
+            System.out.println("Current node is the closest node. Send response to '" + lookupNodeMsg.getNodeAddress() + "'");
+
+            Socket socket = new Socket(lookupNodeMsg.getNodeAddress().getInetAddress(), lookupNodeMsg.getNodeAddress().getPort());
+            ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
+            out.writeObject(new NearByNodeInfoMsg(this.node.nodeID, new NodeAddress(this.node.name, null, this.node.port)));
+            socket.close();
+        } else {
+            //Keep forwarding the request to closer node
+            System.out.println("Forwarding lookup node message for id = " + convertBytesToHex(lookupNodeMsg.getID()) + " to closer node '" + forwardAddr + "'");
+            Socket socket = new Socket(forwardAddr.getInetAddress(), forwardAddr.getPort());
+            ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
+            out.writeObject(lookupNodeMsg);
+
+            socket.close();
+        }
+    }
+
+    private void readDataHandler(Message requestMsg) {
+        ReadDataMsg readDataMsg = (ReadDataMsg)requestMsg;
+        String readId = convertBytesToHex(readDataMsg.getID());
+
+        System.out.println("Reading data with id = " + readId);
+        //check if we have data with this id
+        boolean dataFound = false;
+        for(String storedId : node.dataList.keySet()) {
+            if(storedId.equalsIgnoreCase(readId)) {
+                System.out.println("read id found in datalist");
+                dataFound = true;
+                byte[] data = node.dataList.get(readId);
+                replyMsg = new WriteDataMsg(readDataMsg.getID(), data);
+            }
+        }
+        if(!dataFound) {
+            System.out.println("Data with id = " + readId + " is not found on this node");
+            replyMsg = new ErrorMessage("The current node does not contain data with id = " + readId);
+        }
+    }
+
+    private void writeDataHandler(Message requestMsg) {
+        WriteDataMsg writeDataMsg = (WriteDataMsg)requestMsg;
+        String writeId = convertBytesToHex(writeDataMsg.getID());
+
+        System.out.println("Writing in data with id = " + writeId);
+        //write data to the current node
+        this.node.dataList.put(writeId, writeDataMsg.getData());
     }
 }

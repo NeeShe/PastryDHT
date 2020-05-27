@@ -164,6 +164,7 @@ public class LeafSet {
                     closest = cur;
                     closestDist = dist;
                     closestAddr = leftSet.get(id);
+                    System.out.println("Found in left set");
                 }
             }
 
@@ -174,9 +175,11 @@ public class LeafSet {
                     closest = cur;
                     closestDist = dist;
                     closestAddr = rightSet.get(id);
+                    System.out.println("Found in right set");
                 }
             }
             if(closestAddr == null){
+                System.out.println("Not found");
                 return new NodeAddress(node.name,null,node.port);
             }
             return closestAddr;

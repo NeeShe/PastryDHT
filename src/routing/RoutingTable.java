@@ -84,13 +84,20 @@ public class RoutingTable {
         node.readWriteLock.readLock().lock();
         try {
             String searchIdStr = convertBytesToHex(searchId);
-            short closest = (short)Integer.parseInt(node.idStr.substring(prefixLen, prefixLen+1), 16);
+//            short closest = (short)Integer.parseInt(node.idStr.substring(prefixLen, prefixLen+1), 16);
+            short closest = (short)convertSingleHexToInt(node.idStr.substring(prefixLen, prefixLen+1));
             int closestDist = getHexDistance(node.idStr.substring(prefixLen, prefixLen+1), searchIdStr.substring(prefixLen, prefixLen+1));
             NodeAddress closestAddr = null; //neetha: node.address is wrong assignment.
             for(String id : routingTable.get(prefixLen).keySet()) {
-                short cur = (short)Integer.parseInt(id, 16);
+//                short cur = (short)Integer.parseInt(id, 16);
+                short cur = (short)convertSingleHexToInt(id);
                 int dist = getHexDistance(id.substring(prefixLen, prefixLen+1), searchIdStr.substring(prefixLen, prefixLen+1));
-                if(dist < closestDist ||(dist == closestDist && cur < closest)) {
+                if(dist < closestDist ||(dist == closestDist && closest < cur)) {
+                    if(dist == closestDist) {
+                        System.out.println("dist == closeset");
+                        System.out.println("cur = " + cur + "    : " + dist) ;
+                        System.out.println("closest = " + closest + "    : " + closestDist);
+                    }
                     closest = cur;
                     closestDist = dist;
                     closestAddr = routingTable.get(prefixLen).get(id);
