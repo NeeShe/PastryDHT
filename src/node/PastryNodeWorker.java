@@ -343,7 +343,7 @@ public class PastryNodeWorker extends Thread{
         NodeAddress forwardAddr = null;
 
         //check if data existed in leaf set
-        int searchId = convertBytesToShort(lookupNodeMsg.getID());
+        int searchId = Integer.parseInt(convertBytesToHex(lookupNodeMsg.getID()),16);
         byte[] lsMinIdInByte = null;
         byte[] lsMaxIdInByte = null;
         int lsMinId = Integer.MIN_VALUE;
@@ -351,14 +351,14 @@ public class PastryNodeWorker extends Thread{
         if((this.node.leafSet.leftSet.size() > 0 && this.node.leafSet.rightSet.size() > 0)) {
             lsMinIdInByte = this.node.leafSet.leftSet.firstKey();
             lsMaxIdInByte = this.node.leafSet.rightSet.firstKey();
-            lsMinId = convertBytesToShort(lsMinIdInByte);
-            lsMaxId = convertBytesToShort(lsMaxIdInByte);
+            lsMinId = Integer.parseInt(convertBytesToHex(lsMinIdInByte),16);
+            lsMaxId = Integer.parseInt(convertBytesToHex(lsMaxIdInByte),16);
         }
 
+        //neetha: now lsMinId is always less than lsMaxId (no negative numbers)
         //min < search < max || (max < min < search || search < max < min)
         if ((this.node.leafSet.leftSet.size() > 0 && this.node.leafSet.rightSet.size() > 0) &&
-            (lsMinId < lsMaxId && lsMinId <= searchId && searchId <= lsMaxId) ||       //min=-10, id=-6, max=-4
-            (lsMinId > lsMaxId && (lsMinId <= searchId || searchId <= lsMaxId))) {    //min = 10, id = -4, max = -6
+            (lsMinId <= searchId && searchId <= lsMaxId)) {    //min = 2, id = 4, max = 6
             forwardAddr = this.node.leafSet.searchClosest(this.node, lookupNodeMsg.getID());
         } else {
             forwardAddr = this.node.routingTable.searchExact(this.node, lookupNodeMsg.getID(), lookupNodeMsg.getPrefixLength());
