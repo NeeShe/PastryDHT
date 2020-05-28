@@ -1,5 +1,6 @@
 package node;
 
+import data.DataStore;
 import message.*;
 import routing.LeafSet;
 import routing.NeighborhoodSet;
@@ -14,7 +15,6 @@ import java.io.ObjectOutputStream;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Scanner;
@@ -35,7 +35,7 @@ public class PastryNode extends Thread{
     public String idStr;
     public String name;
     public NodeAddress address;
-    public Map<String, byte[]> dataList;
+    public DataStore dataStore;
     public LeafSet leafSet;
     public NeighborhoodSet neighborhoodSet;
     public RoutingTable routingTable;
@@ -49,7 +49,7 @@ public class PastryNode extends Thread{
         this.nodeID = id;
         this.idStr = Util.convertBytesToHex(this.nodeID);
         this.address = new NodeAddress(this.name, null, this.port);
-        this.dataList = new HashMap<>();
+        this.dataStore = new DataStore();
         this.leafSet = new LeafSet(this.nodeID, this.leafSize);
         this.neighborhoodSet = new NeighborhoodSet(this.nodeID,this.NEIGHBOR_SIZE);
         this.routingTable = new RoutingTable();
@@ -147,7 +147,7 @@ public class PastryNode extends Thread{
                     node.neighborhoodSet.print(node);
                     node.leafSet.print(node);
                     node.routingTable.print(node);
-                    printDataList(node);
+                    node.dataStore.printData(node);
                 }else if(op.equalsIgnoreCase("getId")){
                     short idInShort = convertBytesToShort(node.nodeID);
                     System.out.println("ID In Short"+idInShort);
@@ -160,12 +160,7 @@ public class PastryNode extends Thread{
         }
     }
 
-    private static void printDataList(PastryNode node) {
-        System.out.println("---------------DataList----------------");
-        for(String dataId : node.dataList.keySet()) {
-            System.out.println("id = " + dataId + "  :  data = " + printByteAsString(node.dataList.get(dataId)));
-        }
-    }
+
 
 }
 

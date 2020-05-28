@@ -25,7 +25,7 @@ public class ClientNode {
             int port = Integer.parseInt(args[0]);
             int discoveryNodePort = Integer.parseInt(args[1]);
             InetAddress discoveryNodeAddr = InetAddress.getLocalHost();
-
+            int requestType;
             while (true) {
                 System.out.println("------Options-------");
                 System.out.println("W) Write data");
@@ -40,12 +40,14 @@ public class ClientNode {
                 } else if (opType.equalsIgnoreCase("W")
                         || opType.equalsIgnoreCase("R")) {
                     //store in new data
+                    requestType=0;
                     System.out.print("Data Id (or leave blank to auto-generate for Write operations): ");
                     String idStr = scn.nextLine();
                     if(opType.equalsIgnoreCase("W")) {
                         System.out.print("New Data Content: ");
                         String content = scn.nextLine();
                         data = content.getBytes();
+                        requestType=1; //data request type 1 => write
                     }
                     if (idStr == null || idStr.length() <= 0) {
                         //auto generate a new id randomly
@@ -61,7 +63,7 @@ public class ClientNode {
                 //assign node address to the new data node by getting a random node
                 NodeAddress nodeAddr = getRandomNode(discoveryNodeAddr, discoveryNodePort);
                 //look for the closest node in network
-                NodeAddress closestNodeAddr = lookUpNode(nodeAddr, port);
+                NodeAddress closestNodeAddr = lookUpNode(nodeAddr, port,requestType);
 
 
                 if (opType.equalsIgnoreCase("W")) {
@@ -126,13 +128,13 @@ public class ClientNode {
         return ((NearByNodeInfoMsg)replyMsg).getNodeAddress();
     }
 
-    private static NodeAddress lookUpNode(NodeAddress nodeAddress, int port) throws Exception {
+    private static NodeAddress lookUpNode(NodeAddress nodeAddress, int port, int requestType) throws Exception {
         //start a new server socket to receive the connection
         ServerSocket serverSocket = new ServerSocket(port);
 
         //send store data message to the random node
         System.out.println("Forwarding lookup node message with id " + convertBytesToHex(id) + " to node " + nodeAddress);
-        LookupNodeMsg lookupNodeMsg = new LookupNodeMsg(id, new NodeAddress("ClientNode", null, port), 0);
+        LookupNodeMsg lookupNodeMsg = new LookupNodeMsg(id, new NodeAddress("ClientNode", null, port), 0,requestType);
         lookupNodeMsg.addHop(nodeAddress);
         Socket newDataSocket = new Socket(nodeAddress.getInetAddress(), nodeAddress.getPort());
 

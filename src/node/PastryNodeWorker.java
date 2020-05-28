@@ -10,8 +10,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 
-import static util.Util.convertBytesToHex;
-import static util.Util.convertBytesToShort;
+import static util.Util.*;
 
 public class PastryNodeWorker extends Thread{
     protected Socket socket;
@@ -342,53 +341,69 @@ public class PastryNodeWorker extends Thread{
         System.out.println("Received look up node message '" + lookupNodeMsg.toString() + "'");
         NodeAddress forwardAddr = null;
 
-        //check if data existed in leaf set
-        int searchId = Integer.parseInt(convertBytesToHex(lookupNodeMsg.getID()),16);
-        byte[] lsMinIdInByte = null;
-        byte[] lsMaxIdInByte = null;
-        int lsMinId = Integer.MIN_VALUE;
-        int lsMaxId = Integer.MAX_VALUE;
-        if((this.node.leafSet.leftSet.size() > 0 && this.node.leafSet.rightSet.size() > 0)) {
-            lsMinIdInByte = this.node.leafSet.leftSet.firstKey();
-            lsMaxIdInByte = this.node.leafSet.rightSet.firstKey();
-            lsMinId = Integer.parseInt(convertBytesToHex(lsMinIdInByte),16);
-            lsMaxId = Integer.parseInt(convertBytesToHex(lsMaxIdInByte),16);
-        }
+        //check the request type
+        //if read
+        boolean foundData= false;
+        if(lookupNodeMsg.getRequestType() == 0){
+            //search if you have data id in store
+            String data = node.dataStore.searchDataID(node,convertBytesToHex(lookupNodeMsg.getID()));
+            if (!data.equals("")){
+                foundData = true;
+                //current node can answer to read request.
+                System.out.println("Current node is the closest node. Send response to '" + lookupNodeMsg.getNodeAddress() + "'");
 
-        //neetha: now lsMinId is always less than lsMaxId (no negative numbers)
-        //min < search < max || (max < min < search || search < max < min)
-        if ((this.node.leafSet.leftSet.size() > 0 && this.node.leafSet.rightSet.size() > 0) &&
-            (lsMinId <= searchId && searchId <= lsMaxId)) {    //min = 2, id = 4, max = 6
-            forwardAddr = this.node.leafSet.searchClosest(this.node, lookupNodeMsg.getID());
-        } else {
-            forwardAddr = this.node.routingTable.searchExact(this.node, lookupNodeMsg.getID(), lookupNodeMsg.getPrefixLength());
-            if (forwardAddr != null) {
-                lookupNodeMsg.setLongestPrefixMatch(lookupNodeMsg.getPrefixLength() + 1);
-            } else {
-                forwardAddr = this.node.routingTable.searchClosest(this.node, lookupNodeMsg.getID(), lookupNodeMsg.getPrefixLength());
-                if (forwardAddr == null) {
-                    forwardAddr = this.node.leafSet.searchClosest(this.node, lookupNodeMsg.getID());
-                }
+                Socket socket = new Socket(lookupNodeMsg.getNodeAddress().getInetAddress(), lookupNodeMsg.getNodeAddress().getPort());
+                ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
+                out.writeObject(new NearByNodeInfoMsg(this.node.nodeID, new NodeAddress(this.node.name, null, this.node.port)));
+                socket.close();
             }
         }
+        if(!foundData){
+            //check if data existed in leaf set
+            int searchId = Integer.parseInt(convertBytesToHex(lookupNodeMsg.getID()),16);
+            byte[] lsMinIdInByte = null;
+            byte[] lsMaxIdInByte = null;
+            int lsMinId = Integer.MIN_VALUE;
+            int lsMaxId = Integer.MAX_VALUE;
+            if((this.node.leafSet.leftSet.size() > 0 && this.node.leafSet.rightSet.size() > 0)) {
+                lsMinIdInByte = this.node.leafSet.leftSet.firstKey();
+                lsMaxIdInByte = this.node.leafSet.rightSet.firstKey();
+                lsMinId = Integer.parseInt(convertBytesToHex(lsMinIdInByte),16);
+                lsMaxId = Integer.parseInt(convertBytesToHex(lsMaxIdInByte),16);
+            }
 
+            //neetha: now lsMinId is always less than lsMaxId (no negative numbers)
+            //min < search < max || (max < min < search || search < max < min)
+            if ((this.node.leafSet.leftSet.size() > 0 && this.node.leafSet.rightSet.size() > 0) &&
+                    (lsMinId <= searchId && searchId <= lsMaxId)) {    //min = 2, id = 4, max = 6
+                forwardAddr = this.node.leafSet.searchClosest(this.node, lookupNodeMsg.getID());
+            } else {
+                forwardAddr = this.node.routingTable.searchExact(this.node, lookupNodeMsg.getID(), lookupNodeMsg.getPrefixLength());
+                if (forwardAddr != null) {
+                    lookupNodeMsg.setLongestPrefixMatch(lookupNodeMsg.getPrefixLength() + 1);
+                } else {
+                    forwardAddr = this.node.routingTable.searchClosest(this.node, lookupNodeMsg.getID(), lookupNodeMsg.getPrefixLength());
+                    if (forwardAddr == null) {
+                        forwardAddr = this.node.leafSet.searchClosest(this.node, lookupNodeMsg.getID());
+                    }
+                }
+            }
+            if(forwardAddr.getInetAddress() == null) {
+                //The current node is the closest where the data should reside in
+                System.out.println("Current node is the closest node. Send response to '" + lookupNodeMsg.getNodeAddress() + "'");
 
-        if(forwardAddr.getInetAddress() == null) {
-            //The current node is the closest where the data should reside in
-            System.out.println("Current node is the closest node. Send response to '" + lookupNodeMsg.getNodeAddress() + "'");
-
-            Socket socket = new Socket(lookupNodeMsg.getNodeAddress().getInetAddress(), lookupNodeMsg.getNodeAddress().getPort());
-            ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
-            out.writeObject(new NearByNodeInfoMsg(this.node.nodeID, new NodeAddress(this.node.name, null, this.node.port)));
-            socket.close();
-        } else {
-            //Keep forwarding the request to closer node
-            System.out.println("Forwarding lookup node message for id = " + convertBytesToHex(lookupNodeMsg.getID()) + " to closer node '" + forwardAddr + "'");
-            Socket socket = new Socket(forwardAddr.getInetAddress(), forwardAddr.getPort());
-            ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
-            out.writeObject(lookupNodeMsg);
-
-            socket.close();
+                Socket socket = new Socket(lookupNodeMsg.getNodeAddress().getInetAddress(), lookupNodeMsg.getNodeAddress().getPort());
+                ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
+                out.writeObject(new NearByNodeInfoMsg(this.node.nodeID, new NodeAddress(this.node.name, null, this.node.port)));
+                socket.close();
+            } else {
+                //Keep forwarding the request to closer node
+                System.out.println("Forwarding lookup node message for id = " + convertBytesToHex(lookupNodeMsg.getID()) + " to closer node '" + forwardAddr + "'");
+                Socket socket = new Socket(forwardAddr.getInetAddress(), forwardAddr.getPort());
+                ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
+                out.writeObject(lookupNodeMsg);
+                socket.close();
+            }
         }
     }
 
@@ -398,16 +413,12 @@ public class PastryNodeWorker extends Thread{
 
         System.out.println("Reading data with id = " + readId);
         //check if we have data with this id
-        boolean dataFound = false;
-        for(String storedId : node.dataList.keySet()) {
-            if(storedId.equalsIgnoreCase(readId)) {
-                System.out.println("read id found in datalist");
-                dataFound = true;
-                byte[] data = node.dataList.get(readId);
-                replyMsg = new WriteDataMsg(readDataMsg.getID(), data);
-            }
-        }
-        if(!dataFound) {
+        String dataInString = node.dataStore.searchDataID(node,readId);
+        if(!dataInString.equals("")){
+            System.out.println("read id found in datalist");
+            byte[] data = node.dataStore.getByteData(node,readId);
+            replyMsg = new WriteDataMsg(readDataMsg.getID(), data);
+        }else{
             System.out.println("Data with id = " + readId + " is not found on this node");
             replyMsg = new ErrorMessage("The current node does not contain data with id = " + readId);
         }
@@ -419,6 +430,6 @@ public class PastryNodeWorker extends Thread{
 
         System.out.println("Writing in data with id = " + writeId);
         //write data to the current node
-        this.node.dataList.put(writeId, writeDataMsg.getData());
+        this.node.dataStore.ownedData.put(writeId, writeDataMsg.getData());
     }
 }
