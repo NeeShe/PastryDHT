@@ -1,14 +1,13 @@
 package util;
 
-import node.DataNode;
-import node.PastryNode;
+import node.ClientNode;
 
 import java.util.Scanner;
 
 import static util.Util.*;
 
 public class InputListener extends Thread{
-    DataNode node;
+    ClientNode node;
     byte[] id;
     String op;
     String content;
@@ -16,7 +15,7 @@ public class InputListener extends Thread{
     public InputListener(){
 
     }
-//    public InputListener(DataNode node){
+//    public InputListener(ClientNode node){
 //        this.node = node;
 //    }
 

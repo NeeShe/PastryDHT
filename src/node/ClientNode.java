@@ -1,7 +1,6 @@
 package node;
 
 import message.*;
-import util.InputListener;
 import util.NodeAddress;
 
 import java.io.ObjectInputStream;
@@ -9,12 +8,11 @@ import java.io.ObjectOutputStream;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.net.UnknownHostException;
 import java.util.Scanner;
 
 import static util.Util.*;
 
-public class DataNode {
+public class ClientNode {
 
     public static byte[] id;
     public static String opType;
@@ -24,40 +22,25 @@ public class DataNode {
 
 
     public static void main(String args[]) throws Exception {
-//        try {
             int port = Integer.parseInt(args[0]);
             int discoveryNodePort = Integer.parseInt(args[1]);
             InetAddress discoveryNodeAddr = InetAddress.getLocalHost();
 
-
             while (true) {
-
                 System.out.println("------Options-------");
                 System.out.println("W) Write data");
                 System.out.println("R) Retrieve data");
                 System.out.println("Q) Quit");
                 System.out.print("Input:");
 
-
-//                InputListener inputListener = new InputListener();
-//                try {
-//                    inputListener.start();
-//                } finally {
-//                    id = inputListener.getInputId();
-//                    opType = inputListener.getOperation();
-//                    data = inputListener.getInputDataContent().getBytes();
-//                }
-
-
-
-
                 Scanner scn = new Scanner(System.in);
                 opType = scn.nextLine();
                 if (opType.equalsIgnoreCase("Q")) {
                     break;
-                } else if (opType.equalsIgnoreCase("W") || opType.equalsIgnoreCase("R")) {
+                } else if (opType.equalsIgnoreCase("W")
+                        || opType.equalsIgnoreCase("R")) {
                     //store in new data
-                    System.out.print("Data Id (or leave blank to auto-generate: ");
+                    System.out.print("Data Id (or leave blank to auto-generate for Write operations): ");
                     String idStr = scn.nextLine();
                     if(opType.equalsIgnoreCase("W")) {
                         System.out.print("New Data Content: ");
@@ -75,8 +58,6 @@ public class DataNode {
                     continue;
                 }
 
-
-
                 //assign node address to the new data node by getting a random node
                 NodeAddress nodeAddr = getRandomNode(discoveryNodeAddr, discoveryNodePort);
                 //look for the closest node in network
@@ -84,7 +65,7 @@ public class DataNode {
 
 
                 if (opType.equalsIgnoreCase("W")) {
-                    System.out.println("Writing data with id " + convertBytesToHex(id) + " to node " + closestNodeAddr);
+                    System.out.println("Writing data with id " + convertBytesToHex(id) );//+ " to node " + closestNodeAddr);
                     //write data to the node found
                     WriteDataMsg writeDataMsg = new WriteDataMsg(id, data);
                     Socket socket = new Socket(closestNodeAddr.getInetAddress(), closestNodeAddr.getPort());
@@ -109,14 +90,14 @@ public class DataNode {
                         System.out.println(((ErrorMessage)replyMsg).getMsg());
                         System.exit(1);
                     } else if (replyMsg.getMsgType() != Message.WRITE_DATA_MSG) {
-                        throw new Exception("Recieved an unexpected message type '" + replyMsg.getMsgType() + "'.");
+                        throw new Exception("Received an unexpected message type '" + replyMsg.getMsgType() + "'.");
                     }
 
                     WriteDataMsg writeDataMsg = (WriteDataMsg) replyMsg;
 
                     //write with data retrieved
                     data = writeDataMsg.getData();
-                    System.out.println("Data with id = " + id + " found : " + printByteAsString(data));
+                    System.out.println("Data found : " + printByteAsString(data));
                 }
             }
 
@@ -137,11 +118,10 @@ public class DataNode {
         discoveryNodeSocket.close();
 
         if(replyMsg.getMsgType() == Message.ERROR_MSG) {
-//            throw new Exception(((ErrorMessage)replyMsg).getMsg());
             System.out.println(((ErrorMessage)replyMsg).getMsg());
             System.exit(1);
         } else if(replyMsg.getMsgType() != Message.NEARBY_NODE_INFO_MSG) {
-            throw new Exception("Recieved an unexpected message type '" + replyMsg.getMsgType() + "'.");
+            throw new Exception("Received an unexpected message type '" + replyMsg.getMsgType() + "'.");
         }
         return ((NearByNodeInfoMsg)replyMsg).getNodeAddress();
     }
@@ -151,7 +131,8 @@ public class DataNode {
         ServerSocket serverSocket = new ServerSocket(port);
 
         //send store data message to the random node
-        LookupNodeMsg lookupNodeMsg = new LookupNodeMsg(id, new NodeAddress("StoreData", null, port), 0);
+        System.out.println("Forwarding lookup node message with id " + convertBytesToHex(id) + " to node " + nodeAddress);
+        LookupNodeMsg lookupNodeMsg = new LookupNodeMsg(id, new NodeAddress("ClientNode", null, port), 0);
         lookupNodeMsg.addHop(nodeAddress);
         Socket newDataSocket = new Socket(nodeAddress.getInetAddress(), nodeAddress.getPort());
 
@@ -160,19 +141,18 @@ public class DataNode {
 
         newDataSocket.close();
 
-        System.out.println("Forwarding lookup node message with id " + convertBytesToHex(id) + " to node " + nodeAddress);
 
+        //System.out.println("Wait to receive connection from the node where the data should reside");
         //Receive connection from the node where the data should reside
         Socket nodeSocket = serverSocket.accept();
         Message replyMsg = (Message) new ObjectInputStream(nodeSocket.getInputStream()).readObject();
 
         //ensure we get a node info message
         if(replyMsg.getMsgType() == Message.ERROR_MSG) {
-//            throw new Exception(((ErrorMessage)replyMsg).getMsg());
             System.out.println(((ErrorMessage)replyMsg).getMsg());
             System.exit(1);
         } else if(replyMsg.getMsgType() != Message.NEARBY_NODE_INFO_MSG) {
-            throw new Exception("Recieved an unexpected message type '" + replyMsg.getMsgType() + "'.");
+            throw new Exception("Received an unexpected message type '" + replyMsg.getMsgType() + "'.");
         }
 
         //parse reply message
