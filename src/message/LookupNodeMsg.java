@@ -13,12 +13,14 @@ public class LookupNodeMsg extends Message{
     private NodeAddress nodeAddress;
     private int prefixLength;
     private List<NodeAddress> hops;
+    private int requestType; //0-read, 1-write
 
-    public LookupNodeMsg(byte[] id, NodeAddress nodeAddress, int prefixLength) {
+    public LookupNodeMsg(byte[] id, NodeAddress nodeAddress, int prefixLength, int requestType) {
         this.id = id;
         this.nodeAddress = nodeAddress;
         this.prefixLength = prefixLength;
         this.hops = new LinkedList();
+        this.requestType = requestType;
     }
 
     public byte[] getID() {
@@ -41,6 +43,8 @@ public class LookupNodeMsg extends Message{
         hops.add(nodeAddress);
     }
 
+    public int getRequestType(){return requestType;}
+
     @Override
     public int getMsgType() {
         return LOOKUP_NODE_MSG;
@@ -54,7 +58,7 @@ public class LookupNodeMsg extends Message{
         for(NodeAddress nodeAddress : hops) {
             strBldr.append(" -> " + nodeAddress.toString());
         }
-
+        strBldr.append(" REQUEST TYPE:"+requestType);
         return strBldr.toString();
     }
 }
