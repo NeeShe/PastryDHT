@@ -81,9 +81,10 @@ public class PastryNode extends Thread{
                 //perform action on reply message
                 switch(replyMsg.getMsgType()) {
                     case Message.NEARBY_NODE_INFO_MSG:
+                        //got the info of a random nearby node
                         NearByNodeInfoMsg nodeInfoMsg = (NearByNodeInfoMsg) replyMsg;
                         System.out.println("Sending Node join message to '" + nodeInfoMsg.getNodeAddress().getInetAddress() + ":" + nodeInfoMsg.getNodeAddress().getPort() + "'");
-                        //send node join message
+                        //send node join message to the random node we just got
                         this.neighborhoodSet.addNewNode(this,nodeInfoMsg.getID(),nodeInfoMsg.getNodeAddress());
                         this.sendJoinRequest(nodeInfoMsg);
                         success = true;
@@ -116,8 +117,10 @@ public class PastryNode extends Thread{
     }
 
     private void sendJoinRequest(NearByNodeInfoMsg nodeInfoMsg) {
+        //the nodeInfoMsg contains info of the nearby random node
+        //the nodeJoinMsg contains info of the current node
         NodeJoinMessage nodeJoinMsg = new NodeJoinMessage(nodeID, 0, new NodeAddress(name, null, port));
-        nodeJoinMsg.addHop(nodeInfoMsg.getNodeAddress());
+        nodeJoinMsg.addHop(nodeInfoMsg.getNodeAddress());   //hop is now "currentNode -> randomNode" but will be received by randomNode
         Socket nodeSocket = null;
         try {
             nodeSocket = new Socket(nodeInfoMsg.getNodeAddress().getInetAddress(), nodeInfoMsg.getNodeAddress().getPort());
@@ -128,7 +131,6 @@ public class PastryNode extends Thread{
         }
 
     }
-
 
     public static void main(String[] args) {
         try {
@@ -151,6 +153,8 @@ public class PastryNode extends Thread{
                 }else if(op.equalsIgnoreCase("getId")){
                     short idInShort = convertBytesToShort(node.nodeID);
                     System.out.println("ID In Short"+idInShort);
+                }else if(op.equalsIgnoreCase("leave")){
+                    leave(node);
                 }
             }
 
@@ -164,6 +168,58 @@ public class PastryNode extends Thread{
         System.out.println("---------------DataList----------------");
         for(String dataId : node.dataList.keySet()) {
             System.out.println("id = " + dataId + "  :  data = " + printByteAsString(node.dataList.get(dataId)));
+        }
+    }
+
+    //the current node is leaving, notify all the other nodes in its list
+    private static void leave(PastryNode node) {
+
+        //find out all the nodes in its list
+
+        //send leave request to nodes in routing table
+        for(int prefixLen = 0; prefixLen < node.routingTable.tableSize; prefixLen++) {
+            Map<String, NodeAddress> routingTableRow = node.routingTable.get(node, prefixLen);
+            for(String idStr : routingTableRow.keySet()) {
+                sendLeaveRequest(node, convertHexToBytes(idStr), routingTableRow.get(idStr), prefixLen);
+            }
+        }
+
+        //notify nodes in leaf set
+        for(byte[] id : node.leafSet.leftSet.keySet()) {
+            sendLeaveRequest(node, id, node.leafSet.leftSet.get(id), -1);
+        }
+        for(byte[] id : node.leafSet.rightSet.keySet()) {
+            sendLeaveRequest(node, id, node.leafSet.rightSet.get(id), -1);
+        }
+
+        //notify nodes in neighborhood set
+        for(byte[] id : node.neighborhoodSet.get(node).keySet()) {
+            sendLeaveRequest(node, id, node.neighborhoodSet.get(node).get(id), -1);
+        }
+
+        //transfer all data to left node in its left set
+        NodeLeaveDataTransferMsg nodeLeaveDataTransferMsg = new NodeLeaveDataTransferMsg();
+    }
+
+    //send out the notification to a node
+    private static void sendLeaveRequest(PastryNode node, byte[] id, NodeAddress destAddress, int prefixLen) {
+
+        //get the node info of the the destination node that needs to be notified
+        LeaveNodeInfoMsg leaveNodeInfoMsg = new LeaveNodeInfoMsg(id, prefixLen, destAddress);
+        System.out.println("Sending node leave message to '" + leaveNodeInfoMsg.getNodeAddress().getInetAddress() + ":" + leaveNodeInfoMsg.getNodeAddress().getPort() + "'");
+
+        NodeLeaveMsg nodeLeaveMsg = new NodeLeaveMsg(node.nodeID, prefixLen, node.address);
+
+        Socket nodeSocket = null;
+        try{
+            //connect with the node needs to be notified
+            nodeSocket = new Socket(leaveNodeInfoMsg.getNodeAddress().getInetAddress(), leaveNodeInfoMsg.getNodeAddress().getPort());
+
+            //send out the message
+            ObjectOutputStream nodeOut = new ObjectOutputStream(nodeSocket.getOutputStream());
+            nodeOut.writeObject(nodeLeaveMsg);
+        } catch (IOException e) {
+            e.printStackTrace();
         }
     }
 

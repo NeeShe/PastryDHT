@@ -160,6 +160,7 @@ public class DiscoveryNode extends Thread {
                             } else {
                                 readWriteLock.readLock().lock();
                                 try {
+                                    //return the info of a random nearby node
                                     replyMsg = new NearByNodeInfoMsg(id, nodes.get(id));
                                 } finally {
                                     readWriteLock.readLock().unlock();

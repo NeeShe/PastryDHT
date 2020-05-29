@@ -33,10 +33,16 @@ public class PastryNodeWorker extends Thread{
 
             Message replyMsg = null;
             switch(requestMsg.getMsgType()) {
+                //once a new node joined, it sends a node_join_msg to one node
+                //that node will find the suitable place for it inside its routing table
+                //and than send the routing_info_msg back to the new node
+                //to let it update its routing info
                 case Message.NODE_JOIN_MSG:
+                    //received by the node already existed
                     this.nodeJoinHandler(requestMsg);
                     break;
                 case Message.ROUTING_INFO_MSG:
+                    //received by the new join node
                     this.routingInfoHandler(requestMsg);
                     break;
                 case Message.LOOKUP_NODE_MSG:
@@ -47,6 +53,9 @@ public class PastryNodeWorker extends Thread{
                     break;
                 case  Message.WRITE_DATA_MSG:
                     this.writeDataHandler(requestMsg);
+                    break;
+                case Message.NODE_LEAVE_MSG:
+                    this.nodeLeaveHandler(requestMsg);
                     break;
                 default:
                     System.err.println("Unrecognized request message type '" + requestMsg.getMsgType() + "'");
@@ -134,7 +143,10 @@ public class PastryNodeWorker extends Thread{
             e.printStackTrace();
         }
     }
+
+
     //method to handle incoming routing information message
+    //add all the incoming routing info as its own
     private void routingInfoHandler(Message requestMsg) {
         RoutingInfoMsg routingInfoMsg = (RoutingInfoMsg) requestMsg;
         System.out.println("Received routing info message with " + routingInfoMsg.getLeafSet().size() + " routes.");
@@ -420,5 +432,34 @@ public class PastryNodeWorker extends Thread{
         System.out.println("Writing in data with id = " + writeId);
         //write data to the current node
         this.node.dataList.put(writeId, writeDataMsg.getData());
+    }
+
+    //deal with another node's leave
+    //remove it from its list
+    private void nodeLeaveHandler(Message requestMsg) {
+        NodeLeaveMsg nodeLeaveMsg = (NodeLeaveMsg)requestMsg;
+        byte[] leaveId = nodeLeaveMsg.getID();
+        String leaveIdStr = convertBytesToHex(leaveId);
+        if(nodeLeaveMsg.getNodeAddress().getInetAddress() == null) {
+            nodeLeaveMsg.getNodeAddress().setInetAddress(socket.getInetAddress());
+        }
+
+        System.out.println("Received node leave request from '" + nodeLeaveMsg.toString() + "'.");
+        int prefixLen = nodeLeaveMsg.getPrefixLength();
+        if(prefixLen >= 0) {
+            //the msg is for routing table and already know where the leaving node is in the routing table
+            node.routingTable.get(node, prefixLen).remove(leaveIdStr);
+        } else {
+            //the msg is for leafset or neighborhood set
+            if(node.leafSet.leftSet.containsKey(leaveId)) {
+                node.leafSet.leftSet.remove(leaveId);
+            }
+            if(node.leafSet.rightSet.containsKey(leaveId)) {
+                node.leafSet.rightSet.remove(leaveId);
+            }
+            if(node.neighborhoodSet.get(node).containsKey(leaveId)) {
+                node.neighborhoodSet.get(node).remove(leaveId);
+            }
+        }
     }
 }
