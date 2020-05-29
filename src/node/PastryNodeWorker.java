@@ -401,13 +401,33 @@ public class PastryNodeWorker extends Thread{
     }
 
     private void writeDataHandler(Message requestMsg) {
-        WriteDataMsg writeDataMsg = (WriteDataMsg)requestMsg;
-        String writeId = convertBytesToHex(writeDataMsg.getID());
+        try{
+            WriteDataMsg writeDataMsg = (WriteDataMsg)requestMsg;
+            String writeId = convertBytesToHex(writeDataMsg.getID());
 
-        System.out.println("Writing in data with id = " + writeId);
-        //write data to the current node
-        this.node.dataStore.ownedData.put(writeId, writeDataMsg.getData());
+            System.out.println("Writing in data with id = " + writeId);
+            //write data to the current node
+            this.node.dataStore.ownedData.put(writeId, writeDataMsg.getData());
+            //send a copy to the first left leaf node to maintain a copy
+            if(this.node.leafSet.leftSet.size() > 0){
+                byte[] replicaNode = this.node.leafSet.leftSet.firstKey();
+                NodeAddress replicaNodeAddress = this.node.leafSet.leftSet.get(replicaNode);
+                HashMap<String,byte[]> replicaToSend = new HashMap<>();
+                replicaToSend.put(writeId,writeDataMsg.getData());
+                System.out.println("Transferring a copy to left leaf node");
+                DataTransferMsg dataTransferMsg = new DataTransferMsg(this.node.nodeID,this.node.address,new HashMap<>(),replicaToSend);
+                Socket nodeSocket = new Socket(replicaNodeAddress.getInetAddress(), replicaNodeAddress.getPort());
+                ObjectOutputStream dataTransferStream = new ObjectOutputStream(nodeSocket.getOutputStream());
+                dataTransferStream.writeObject(dataTransferMsg);
+                nodeSocket.close();
+            }
+        }catch(Exception e){
+              e.printStackTrace();
+        }
+
     }
+
+
 
     private void dataRequestHandler(Message requestMsg) {
         try{
