@@ -50,8 +50,10 @@ public class PastryNodeWorker extends Thread{
                     break;
                 case Message.DATA_TRANSFER_MSG:
                     this.dataTransferHandler(requestMsg);
+                    break;
                 case Message.REQUEST_DATA_MSG:
                     this.dataRequestHandler(requestMsg);
+                    break;
                 default:
                     System.err.println("Unrecognized request message type '" + requestMsg.getMsgType() + "'");
                     break;
@@ -131,44 +133,6 @@ public class PastryNodeWorker extends Thread{
                     nodeOut.writeObject(nodeJoinMsg);
                     nodeSocket.close();
                 }
-                //if this node is closest node, transfer data based on key
-                if(nodeAddress.getInetAddress() == null){
-                    HashMap<String,byte[]> dataToSend = new HashMap<>();
-                    int nodeIdInInt = Integer.parseInt(convertBytesToHex(this.node.nodeID),16);
-                    int joinIdInInt = Integer.parseInt(convertBytesToHex(nodeJoinMsg.getID()),16);
-                    // if the joining node id < current node id
-                    if(joinIdInInt < nodeIdInInt){
-                        for(String dataId : node.dataStore.ownedData.keySet()) {
-                            int dataIdInInt = Integer.parseInt(dataId,16);
-                            if(dataIdInInt < nodeIdInInt){
-                                //now this data should belong to joining node
-                                dataToSend.put(dataId,node.dataStore.ownedData.get(dataId));
-                                //remove from this node
-                                node.dataStore.ownedData.remove(dataId);
-                            }
-                        }
-                    }else{ //if joining node > current node
-                        for(String dataId : node.dataStore.ownedData.keySet()) {
-                            int dataIdInInt = Integer.parseInt(dataId,16);
-                            if(dataIdInInt > nodeIdInInt && dataIdInInt >= joinIdInInt){
-                                //now this data should belong to joining node
-                                dataToSend.put(dataId,node.dataStore.ownedData.get(dataId));
-                                //dont remove but move it to replicated data store
-                                node.dataStore.replicatedData.put(dataId,node.dataStore.ownedData.get(dataId));
-                                node.dataStore.ownedData.remove(dataId);
-                            }
-                        }
-                    }
-                    if(dataToSend.size() != 0){
-                        System.out.println("Transfering applicable data to joining node");
-                        DataTransferMsg dataTransferMsg = new DataTransferMsg(this.node.nodeID,this.node.address,dataToSend);
-                        Socket nodeSocket = new Socket(nodeJoinMsg.getNodeAddress().getInetAddress(), nodeJoinMsg.getNodeAddress().getPort());
-                        ObjectOutputStream dataTransferStream = new ObjectOutputStream(nodeSocket.getOutputStream());
-                        dataTransferStream.writeObject(dataTransferMsg);
-                        nodeSocket.close();
-                    }
-                }
-
         }catch(Exception e){
             System.out.println("DEBUG: Exception area 1");
             e.printStackTrace();
@@ -448,11 +412,16 @@ public class PastryNodeWorker extends Thread{
     private void dataRequestHandler(Message requestMsg) {
         try{
             RequestDataMessage requestDataMsg = (RequestDataMessage) requestMsg;
-            System.out.println("Received data transfer request from node:"+requestDataMsg.getID());
+            if(requestDataMsg.getNodeAddress().getInetAddress() == null) {
+                requestDataMsg.getNodeAddress().setInetAddress(socket.getInetAddress());
+            }
+            System.out.println("Received data transfer request from node:"+convertBytesToHex(requestDataMsg.getID()));
             int requesterIdInInt = Integer.parseInt(convertBytesToHex(requestDataMsg.getID()),16);
             int idInInt = Integer.parseInt(convertBytesToHex(this.node.nodeID),16);
             //search if requester is in left leaf set
             HashMap<String,byte[]> dataToSend = new HashMap<>();
+            HashMap<String,byte[]> replicaToSend = new HashMap<>();
+            HashMap<String,byte[]> dataToMove = new HashMap<>();
             if(this.node.leafSet.leftSet.containsKey(requestDataMsg.getID())){
                 //transfer the data of ids < node id
                 for(String dataId : node.dataStore.ownedData.keySet()) {
@@ -473,14 +442,25 @@ public class PastryNodeWorker extends Thread{
                         //now this data should belong to joining node
                         dataToSend.put(dataId,node.dataStore.ownedData.get(dataId));
                         //dont remove but move it to replicated data store
-                        node.dataStore.replicatedData.put(dataId,node.dataStore.ownedData.get(dataId));
+                        dataToMove.put(dataId,node.dataStore.ownedData.get(dataId));
                         node.dataStore.ownedData.remove(dataId);
                     }
                 }
+                for(String dataId : node.dataStore.replicatedData.keySet()) {
+                    int dataIdInInt = Integer.parseInt(dataId,16);
+                    if(dataIdInInt > idInInt && dataIdInInt >= requesterIdInInt){
+                        //now this data should belong to joining node
+                        replicaToSend.put(dataId,node.dataStore.replicatedData.get(dataId));
+                        //remove from replicated data
+                        node.dataStore.replicatedData.remove(dataId);
+                    }
+                }
+                //now move data
+                node.dataStore.replicatedData.putAll(dataToMove);
             }
-            if(dataToSend.size() != 0){
+            if(dataToSend.size() != 0 || replicaToSend.size()!= 0){
                 System.out.println("Transferring applicable data to joining node");
-                DataTransferMsg dataTransferMsg = new DataTransferMsg(this.node.nodeID,this.node.address,dataToSend);
+                DataTransferMsg dataTransferMsg = new DataTransferMsg(this.node.nodeID,this.node.address,dataToSend,replicaToSend);
                 Socket nodeSocket = new Socket(requestDataMsg.getNodeAddress().getInetAddress(), requestDataMsg.getNodeAddress().getPort());
                 ObjectOutputStream dataTransferStream = new ObjectOutputStream(nodeSocket.getOutputStream());
                 dataTransferStream.writeObject(dataTransferMsg);
@@ -494,8 +474,10 @@ public class PastryNodeWorker extends Thread{
     private void dataTransferHandler(Message requestMsg) {
         try{
             DataTransferMsg dataTransferMsg = (DataTransferMsg) requestMsg;
-            System.out.println("Received data transfer message from node:"+dataTransferMsg.getID());
-
+            System.out.println("Received data transfer message from node:"+convertBytesToHex(dataTransferMsg.getID()));
+            //add without ignoring any
+            this.node.dataStore.ownedData.putAll(dataTransferMsg.getData());
+            this.node.dataStore.replicatedData.putAll(dataTransferMsg.getReplicatedData());
 
         }catch(Exception e){
             e.printStackTrace();

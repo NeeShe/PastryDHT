@@ -147,6 +147,7 @@ public class PastryNode extends Thread{
                     node.neighborhoodSet.print(node);
                     node.leafSet.print(node);
                     node.routingTable.print(node);
+                    System.out.println();
                     node.dataStore.printData(node);
                 }
             }
