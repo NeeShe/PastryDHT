@@ -148,9 +148,6 @@ public class PastryNode extends Thread{
                     node.leafSet.print(node);
                     node.routingTable.print(node);
                     node.dataStore.printData(node);
-                }else if(op.equalsIgnoreCase("getId")){
-                    short idInShort = convertBytesToShort(node.nodeID);
-                    System.out.println("ID In Short"+idInShort);
                 }
             }
 

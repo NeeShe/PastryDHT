@@ -6,6 +6,7 @@ import util.Util;
 
 import java.io.*;
 import java.net.Socket;
+import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -47,6 +48,10 @@ public class PastryNodeWorker extends Thread{
                 case  Message.WRITE_DATA_MSG:
                     this.writeDataHandler(requestMsg);
                     break;
+                case Message.DATA_TRANSFER_MSG:
+                    this.dataTransferHandler(requestMsg);
+                case Message.REQUEST_DATA_MSG:
+                    this.dataRequestHandler(requestMsg);
                 default:
                     System.err.println("Unrecognized request message type '" + requestMsg.getMsgType() + "'");
                     break;
@@ -115,7 +120,6 @@ public class PastryNodeWorker extends Thread{
                     this.node.neighborhoodSet.addNewNode(node,nodeJoinMsg.getID(),nodeJoinMsg.getNodeAddress());
                 }
 
-                //TODO
                 //neetha: after fixing searchClosest in leafset and routing table, unexpected entry inside this if condition is resolved
                 //without that fix NodeC was forwarding message to NodeC
                 //if we found a closer node forward the node join message
@@ -126,6 +130,43 @@ public class PastryNodeWorker extends Thread{
                     ObjectOutputStream nodeOut = new ObjectOutputStream(nodeSocket.getOutputStream());
                     nodeOut.writeObject(nodeJoinMsg);
                     nodeSocket.close();
+                }
+                //if this node is closest node, transfer data based on key
+                if(nodeAddress.getInetAddress() == null){
+                    HashMap<String,byte[]> dataToSend = new HashMap<>();
+                    int nodeIdInInt = Integer.parseInt(convertBytesToHex(this.node.nodeID),16);
+                    int joinIdInInt = Integer.parseInt(convertBytesToHex(nodeJoinMsg.getID()),16);
+                    // if the joining node id < current node id
+                    if(joinIdInInt < nodeIdInInt){
+                        for(String dataId : node.dataStore.ownedData.keySet()) {
+                            int dataIdInInt = Integer.parseInt(dataId,16);
+                            if(dataIdInInt < nodeIdInInt){
+                                //now this data should belong to joining node
+                                dataToSend.put(dataId,node.dataStore.ownedData.get(dataId));
+                                //remove from this node
+                                node.dataStore.ownedData.remove(dataId);
+                            }
+                        }
+                    }else{ //if joining node > current node
+                        for(String dataId : node.dataStore.ownedData.keySet()) {
+                            int dataIdInInt = Integer.parseInt(dataId,16);
+                            if(dataIdInInt > nodeIdInInt && dataIdInInt >= joinIdInInt){
+                                //now this data should belong to joining node
+                                dataToSend.put(dataId,node.dataStore.ownedData.get(dataId));
+                                //dont remove but move it to replicated data store
+                                node.dataStore.replicatedData.put(dataId,node.dataStore.ownedData.get(dataId));
+                                node.dataStore.ownedData.remove(dataId);
+                            }
+                        }
+                    }
+                    if(dataToSend.size() != 0){
+                        System.out.println("Transfering applicable data to joining node");
+                        DataTransferMsg dataTransferMsg = new DataTransferMsg(this.node.nodeID,this.node.address,dataToSend);
+                        Socket nodeSocket = new Socket(nodeJoinMsg.getNodeAddress().getInetAddress(), nodeJoinMsg.getNodeAddress().getPort());
+                        ObjectOutputStream dataTransferStream = new ObjectOutputStream(nodeSocket.getOutputStream());
+                        dataTransferStream.writeObject(dataTransferMsg);
+                        nodeSocket.close();
+                    }
                 }
 
         }catch(Exception e){
@@ -179,6 +220,7 @@ public class PastryNodeWorker extends Thread{
         //print out leaf set and routing table. (if at least one entry in leaf set or routing table changed)
         //neetha: not printing here as the print does not work in multiple thread. CHeck locks
         //yinna: this can print correctly
+        //neetha: no. order is not maintained.. all the threads write. so same lines get printed multiple times
 //        if(changed) {
 //            node.leafSet.print(node);
 //            node.routingTable.print(node);
@@ -255,7 +297,6 @@ public class PastryNodeWorker extends Thread{
                     }
                 }
                 //send to neighbouring nodes
-                //send to right leaf set
                 for(Map.Entry<byte[],NodeAddress> entry : node.neighborhoodSet.neighborSet.entrySet()) {
                     if(nodeBlacklist.contains(entry.getValue())) {
                         continue;
@@ -278,53 +319,24 @@ public class PastryNodeWorker extends Thread{
                     nodeOut.writeObject(new RoutingInfoMsg(this.node.leafSet.get(this.node),this.node.neighborhoodSet.get(this.node), i, this.node.routingTable.get(this.node,i), false));
                     nodeSocket.close();
                 }
+
+                //request for data transfer from leaf nodes
+                RequestDataMessage requestDataMessage = new RequestDataMessage(this.node.nodeID,this.node.address);
+                for(Map.Entry<byte[],NodeAddress> entry : node.leafSet.leftSet.entrySet()) {
+                    //send routing update
+                    Socket nodeSocket = new Socket(entry.getValue().getInetAddress(), entry.getValue().getPort());
+                    ObjectOutputStream nodeOut = new ObjectOutputStream(nodeSocket.getOutputStream());
+                    nodeOut.writeObject(requestDataMessage);
+                    nodeSocket.close();
+                }
+                for(Map.Entry<byte[],NodeAddress> entry : node.leafSet.rightSet.entrySet()) {
+                    //send routing update
+                    Socket nodeSocket = new Socket(entry.getValue().getInetAddress(), entry.getValue().getPort());
+                    ObjectOutputStream nodeOut = new ObjectOutputStream(nodeSocket.getOutputStream());
+                    nodeOut.writeObject(requestDataMessage);
+                    nodeSocket.close();
+                }
             }
-//TODO
-//            transfer data to other nodes if needed
-//            for(String dataID : dataStore) {
-//                short dataIDValue = convertBytesToShort(HexConverter.convertHexToBytes(dataID));
-//                int minDistance = Math.min(lessThanDistance(idValue, dataIDValue), greaterThanDistance(idValue, dataIDValue));
-//                NodeAddress forwardNodeAddress = null;
-//
-//                //check less than leaf set
-//                for(Entry<byte[],NodeAddress> entry : lessThanLS.entrySet()) {
-//                    short nodeIDValue = convertBytesToShort(entry.getKey());
-//                    int distance = Math.min(lessThanDistance(dataIDValue, nodeIDValue), greaterThanDistance(dataIDValue, nodeIDValue));
-//                    if(distance < minDistance) {
-//                        minDistance = distance;
-//                        forwardNodeAddress = entry.getValue();
-//                    }
-//                }
-//
-//                //check greater than leaf set
-//                for(Entry<byte[],NodeAddress> entry : greaterThanLS.entrySet()) {
-//                    short nodeIDValue = convertBytesToShort(entry.getKey());
-//                    int distance = Math.min(lessThanDistance(dataIDValue, nodeIDValue), greaterThanDistance(dataIDValue, nodeIDValue));
-//                    if(distance < minDistance) {
-//                        minDistance = distance;
-//                        forwardNodeAddress = entry.getValue();
-//                    }
-//                }
-//
-//                if(forwardNodeAddress != null) {
-//                    //read file
-//                    File file = new File(getFilename(storageDir,dataID));
-//                    byte[] data = new byte[(int)file.length()];
-//                    FileInputStream fileIn = new FileInputStream(file);
-//                    if(fileIn.read(data) != data.length) {
-//                        throw new Exception("Unknown error reading file.");
-//                    }
-//
-//                    fileIn.close();
-//
-//                    //send write data message to node
-//                    LOGGER.info("Forwarding data with id '" + dataID + "' to node " + forwardNodeAddress + ".");
-//                    Socket forwardSocket = new Socket(forwardNodeAddress.getInetAddress(), forwardNodeAddress.getPort());
-//                    ObjectOutputStream forwardOut = new ObjectOutputStream(forwardSocket.getOutputStream());
-//                    forwardOut.writeObject(new WriteDataMsg(HexConverter.convertHexToBytes(dataID), data));
-//
-//                    forwardSocket.close();
-//                    file.delete();
             }catch (Exception e) {
                 System.out.println(e.getMessage());
             } finally {
@@ -431,5 +443,62 @@ public class PastryNodeWorker extends Thread{
         System.out.println("Writing in data with id = " + writeId);
         //write data to the current node
         this.node.dataStore.ownedData.put(writeId, writeDataMsg.getData());
+    }
+
+    private void dataRequestHandler(Message requestMsg) {
+        try{
+            RequestDataMessage requestDataMsg = (RequestDataMessage) requestMsg;
+            System.out.println("Received data transfer request from node:"+requestDataMsg.getID());
+            int requesterIdInInt = Integer.parseInt(convertBytesToHex(requestDataMsg.getID()),16);
+            int idInInt = Integer.parseInt(convertBytesToHex(this.node.nodeID),16);
+            //search if requester is in left leaf set
+            HashMap<String,byte[]> dataToSend = new HashMap<>();
+            if(this.node.leafSet.leftSet.containsKey(requestDataMsg.getID())){
+                //transfer the data of ids < node id
+                for(String dataId : node.dataStore.ownedData.keySet()) {
+                    int dataIdInInt = Integer.parseInt(dataId,16);
+                    if(dataIdInInt < idInInt ){
+                        //now this data should belong to joining node
+                        dataToSend.put(dataId,node.dataStore.ownedData.get(dataId));
+                        //remove from this node
+                        node.dataStore.ownedData.remove(dataId);
+                    }
+                }
+            }
+            //search if the requester is in right set
+            if(this.node.leafSet.rightSet.containsKey(requestDataMsg.getID())){
+                for(String dataId : node.dataStore.ownedData.keySet()) {
+                    int dataIdInInt = Integer.parseInt(dataId,16);
+                    if(dataIdInInt > idInInt && dataIdInInt >= requesterIdInInt){
+                        //now this data should belong to joining node
+                        dataToSend.put(dataId,node.dataStore.ownedData.get(dataId));
+                        //dont remove but move it to replicated data store
+                        node.dataStore.replicatedData.put(dataId,node.dataStore.ownedData.get(dataId));
+                        node.dataStore.ownedData.remove(dataId);
+                    }
+                }
+            }
+            if(dataToSend.size() != 0){
+                System.out.println("Transferring applicable data to joining node");
+                DataTransferMsg dataTransferMsg = new DataTransferMsg(this.node.nodeID,this.node.address,dataToSend);
+                Socket nodeSocket = new Socket(requestDataMsg.getNodeAddress().getInetAddress(), requestDataMsg.getNodeAddress().getPort());
+                ObjectOutputStream dataTransferStream = new ObjectOutputStream(nodeSocket.getOutputStream());
+                dataTransferStream.writeObject(dataTransferMsg);
+                nodeSocket.close();
+            }
+        }catch(Exception e){
+            e.printStackTrace();
+        }
+    }
+
+    private void dataTransferHandler(Message requestMsg) {
+        try{
+            DataTransferMsg dataTransferMsg = (DataTransferMsg) requestMsg;
+            System.out.println("Received data transfer message from node:"+dataTransferMsg.getID());
+
+
+        }catch(Exception e){
+            e.printStackTrace();
+        }
     }
 }
