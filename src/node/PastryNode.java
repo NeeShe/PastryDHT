@@ -194,7 +194,22 @@ public class PastryNode extends Thread{
         }
 
         //transfer all data to left node in its left set
-        NodeLeaveDataTransferMsg nodeLeaveDataTransferMsg = new NodeLeaveDataTransferMsg();
+        NodeLeaveDataTransferMsg nodeLeaveDataTransferMsg = new NodeLeaveDataTransferMsg(node.nodeID, node.dataStore);
+        byte[] destId = node.leafSet.leftSet.firstKey();
+        NodeAddress destAddr = node.leafSet.leftSet.get(destId);
+
+        System.out.println("Sending data store to '" + destAddr.getInetAddress() + ":" + destAddr.getPort() + "'");
+        DataTransferMsg dataTransferMsg = new DataTransferMsg(destId, destAddr, nodeLeaveDataTransferMsg.getOwnedData(), nodeLeaveDataTransferMsg.getReplicatedData());
+        Socket nodeSocket = null;
+        try{
+            nodeSocket = new Socket(destAddr.getInetAddress(), destAddr.getPort());
+
+            //send out the message
+            ObjectOutputStream nodeOut = new ObjectOutputStream(nodeSocket.getOutputStream());
+            nodeOut.writeObject(dataTransferMsg);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 
     //send out the notification to a node
