@@ -15,7 +15,9 @@ public abstract class Message implements Serializable {
             READ_DATA_MSG = 9,
             LEAVE_NODE_INFO_MSG = 10,
             NODE_LEAVE_MSG = 11,
-            NODE_LEAVE_DATA_TRANSFER_MSG = 12;
+            NODE_LEAVE_DATA_TRANSFER_MSG = 12,
+            REQUEST_DATA_MSG = 13,
+            DATA_TRANSFER_MSG = 14;
 
     public abstract int getMsgType();
 }
