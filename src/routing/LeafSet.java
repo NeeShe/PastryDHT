@@ -87,7 +87,7 @@ public class LeafSet {
             Map<byte[], NodeAddress> leafSet = new HashMap<>();
             leafSet.putAll(leftSet);
             leafSet.putAll(rightSet);
-            leafSet.put(node.nodeID, new NodeAddress(node.name, null, node.port));
+            leafSet.put(node.nodeID, new NodeAddress(node.nodeID, node.name, null, node.port));
             return leafSet;
         } finally {
             node.readWriteLock.readLock().unlock();
@@ -202,7 +202,7 @@ public class LeafSet {
             }
             if(closestAddr == null){
                 System.out.println("Not found");
-                return new NodeAddress(node.name,null,node.port);
+                return new NodeAddress(node.nodeID, node.name,null,node.port);
             }
             return closestAddr;
         } finally {

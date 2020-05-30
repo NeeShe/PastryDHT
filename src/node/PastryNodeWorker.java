@@ -56,11 +56,19 @@ public class PastryNodeWorker extends Thread{
                     break;
                 case Message.NODE_LEAVE_MSG:
                     this.nodeLeaveHandler(requestMsg);
+                    break;
                 case Message.DATA_TRANSFER_MSG:
                     this.dataTransferHandler(requestMsg);
                     break;
+                case Message.DATA_TRANSFER_RIGHT_MSG:
+                    this.dataTransferRightHandler(requestMsg);
+                    break;
                 case Message.REQUEST_DATA_MSG:
                     this.dataRequestHandler(requestMsg);
+                    break;
+                case Message.NODE_REMOVED_MSG:
+                    System.out.println("Node left successfully");
+                    System.exit(1);
                     break;
                 default:
                     System.err.println("Unrecognized request message type '" + requestMsg.getMsgType() + "'");
@@ -159,7 +167,7 @@ public class PastryNodeWorker extends Thread{
         for(Map.Entry<byte[],NodeAddress> entry : routingInfoMsg.getLeafSet().entrySet()) {
             //update leaf set
             if(entry.getValue().getInetAddress() == null) {
-                changed = this.node.leafSet.addNewNode(node, entry.getKey(), new NodeAddress(entry.getValue().getNodeName(), socket.getInetAddress(), entry.getValue().getPort())) || changed;
+                changed = this.node.leafSet.addNewNode(node, entry.getKey(), new NodeAddress(entry.getKey(), entry.getValue().getNodeName(), socket.getInetAddress(), entry.getValue().getPort())) || changed;
             } else {
                 changed = this.node.leafSet.addNewNode(node,entry.getKey(), entry.getValue()) || changed;
             }
@@ -176,7 +184,7 @@ public class PastryNodeWorker extends Thread{
                 }
 
                 if(entry.getValue().getInetAddress() == null) {
-                    changed = this.node.routingTable.addNewNode(node,nodeIDStr, new NodeAddress(entry.getValue().getNodeName(), socket.getInetAddress(), entry.getValue().getPort()), i) || changed;
+                    changed = this.node.routingTable.addNewNode(node,nodeIDStr, new NodeAddress(entry.getKey(), entry.getValue().getNodeName(), socket.getInetAddress(), entry.getValue().getPort()), i) || changed;
                 } else {
                     changed = this.node.routingTable.addNewNode(node,nodeIDStr, entry.getValue(), i) || changed;
                 }
@@ -341,7 +349,7 @@ public class PastryNodeWorker extends Thread{
 
                 Socket socket = new Socket(lookupNodeMsg.getNodeAddress().getInetAddress(), lookupNodeMsg.getNodeAddress().getPort());
                 ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
-                out.writeObject(new NearByNodeInfoMsg(this.node.nodeID, new NodeAddress(this.node.name, null, this.node.port)));
+                out.writeObject(new NearByNodeInfoMsg(this.node.nodeID, new NodeAddress(this.node.nodeID, this.node.name, null, this.node.port)));
                 socket.close();
             }
         }
@@ -381,7 +389,7 @@ public class PastryNodeWorker extends Thread{
 
                 Socket socket = new Socket(lookupNodeMsg.getNodeAddress().getInetAddress(), lookupNodeMsg.getNodeAddress().getPort());
                 ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
-                out.writeObject(new NearByNodeInfoMsg(this.node.nodeID, new NodeAddress(this.node.name, null, this.node.port)));
+                out.writeObject(new NearByNodeInfoMsg(this.node.nodeID, new NodeAddress(this.node.nodeID, this.node.name, null, this.node.port)));
                 socket.close();
             } else {
                 //Keep forwarding the request to closer node
@@ -503,6 +511,7 @@ public class PastryNodeWorker extends Thread{
     }
 
     private void dataTransferHandler(Message requestMsg) {
+        node.readWriteLock.writeLock().lock();
         try{
             DataTransferMsg dataTransferMsg = (DataTransferMsg) requestMsg;
             System.out.println("Received data transfer message from node:"+convertBytesToHex(dataTransferMsg.getID()));
@@ -512,35 +521,59 @@ public class PastryNodeWorker extends Thread{
 
         }catch(Exception e){
             e.printStackTrace();
+        } finally {
+            node.readWriteLock.writeLock().unlock();
+        }
+    }
+
+    //if left leaf set is empty, then send only owned data to its right leaf set
+    private void dataTransferRightHandler(Message requestMsg) {
+        node.readWriteLock.writeLock().lock();
+        try{
+            DataTransferRightMsg dataTransferRightMsg = (DataTransferRightMsg) requestMsg;
+            System.out.println("Received data transfer message from node:"+convertBytesToHex(dataTransferRightMsg.getID()));
+            //add without ignoring any
+            this.node.dataStore.ownedData.putAll(dataTransferRightMsg.getData());
+
+        }catch(Exception e){
+            e.printStackTrace();
+        } finally {
+            node.readWriteLock.writeLock().unlock();
         }
     }
 
     //deal with another node's leave
     //remove it from its list
     private void nodeLeaveHandler(Message requestMsg) {
-        NodeLeaveMsg nodeLeaveMsg = (NodeLeaveMsg)requestMsg;
-        byte[] leaveId = nodeLeaveMsg.getID();
-        String leaveIdStr = convertBytesToHex(leaveId);
-        if(nodeLeaveMsg.getNodeAddress().getInetAddress() == null) {
-            nodeLeaveMsg.getNodeAddress().setInetAddress(socket.getInetAddress());
-        }
+        node.readWriteLock.writeLock().lock();
+        try {
+            //get the info of leaving node
+            NodeLeaveMsg nodeLeaveMsg = (NodeLeaveMsg) requestMsg;
+            byte[] leaveId = nodeLeaveMsg.getID();
+            String leaveIdStr = convertBytesToHex(leaveId);
+            if (nodeLeaveMsg.getNodeAddress().getInetAddress() == null) {
+                nodeLeaveMsg.getNodeAddress().setInetAddress(socket.getInetAddress());
+            }
 
-        System.out.println("Received node leave request from '" + nodeLeaveMsg.toString() + "'.");
-        int prefixLen = nodeLeaveMsg.getPrefixLength();
-        if(prefixLen >= 0) {
-            //the msg is for routing table and already know where the leaving node is in the routing table
-            node.routingTable.get(node, prefixLen).remove(leaveIdStr);
-        } else {
-            //the msg is for leafset or neighborhood set
-            if(node.leafSet.leftSet.containsKey(leaveId)) {
-                node.leafSet.leftSet.remove(leaveId);
+            System.out.println("Received node leave request from '" + nodeLeaveMsg.toString() + "'.");
+            int prefixLen = nodeLeaveMsg.getPrefixLength();
+            if (prefixLen >= 0) {
+                //the msg is for routing table and already know where the leaving node is in the routing table
+                node.routingTable.get(node, prefixLen).remove(leaveIdStr.substring(prefixLen, prefixLen+1));
+            } else {
+                //the msg is for leafset or neighborhood set
+                if (node.leafSet.leftSet.containsKey(leaveId)) {
+                    node.leafSet.leftSet.remove(leaveId);
+                }
+                if (node.leafSet.rightSet.containsKey(leaveId)) {
+                    node.leafSet.rightSet.remove(leaveId);
+                }
+                if (node.neighborhoodSet.getOriginalSet(node).containsKey(leaveId)) {
+                    node.neighborhoodSet.getOriginalSet(node).remove(leaveId);
+                }
             }
-            if(node.leafSet.rightSet.containsKey(leaveId)) {
-                node.leafSet.rightSet.remove(leaveId);
-            }
-            if(node.neighborhoodSet.get(node).containsKey(leaveId)) {
-                node.neighborhoodSet.get(node).remove(leaveId);
-            }
+        } finally {
+            node.readWriteLock.writeLock().unlock();
         }
     }
 }

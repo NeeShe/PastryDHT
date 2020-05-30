@@ -16,6 +16,8 @@ import java.util.Random;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
+import static util.Util.convertBytesToHex;
+
 //There will be one discovery node in the system
 //Discovery node maintains information about the list of peers in the system.
 //Every time a peer join or leave the system, it notifies this Discovery Node
@@ -78,7 +80,7 @@ public class DiscoveryNode extends Thread {
             //check to see if id already exists in cluster
             for (byte[] array : nodes.keySet()) {
                 if (Arrays.equals(array, id)) {
-                    throw new Exception("ID '" + Util.convertBytesToHex(id) + "' already exists in cluster");
+                    throw new Exception("ID '" + convertBytesToHex(id) + "' already exists in cluster");
                 }
             }
         } finally {
@@ -90,9 +92,37 @@ public class DiscoveryNode extends Thread {
         readWriteLock.writeLock().lock();
         try {
             nodes.put(id, nodeAddress);
-            System.out.println("Added ID '" + Util.convertBytesToHex(id) + "' for node at '" + nodeAddress + "'.");
+            System.out.println("Added ID '" + convertBytesToHex(id) + "' for node at '" + nodeAddress + "'.");
         } finally {
             readWriteLock.writeLock().unlock();
+        }
+    }
+
+    protected void removeNode(byte[] leaveId, NodeAddress leaveAddr) throws Exception {
+        readWriteLock.writeLock().lock();
+        try {
+            //check to see if id already exists in cluster
+            boolean existed = false;
+            for (byte[] id : nodes.keySet()) {
+                if (Arrays.equals(id, leaveId)) {
+                    nodes.remove(id);
+
+                    //notify the left node that it has left successfully
+                    Socket nodeSocket = new Socket(leaveAddr.getInetAddress(), leaveAddr.getPort());
+                    NodeRemovedMsg nodeRemovedMsg = new NodeRemovedMsg();
+                    ObjectOutputStream out = new ObjectOutputStream(nodeSocket.getOutputStream());
+                    out.writeObject(nodeRemovedMsg);
+
+                    existed = true;
+                    break;
+                }
+            }
+            if(!existed) {
+                throw new Exception("ID '" + convertBytesToHex(leaveId) + "' does not exist in the cluster.");
+            }
+        } finally {
+            readWriteLock.writeLock().unlock();
+            printActiveNodes();
         }
     }
 
@@ -125,7 +155,7 @@ public class DiscoveryNode extends Thread {
         try {
             StringBuilder str = new StringBuilder("----ACTIVE NODES----");
             for(Map.Entry<byte[],NodeAddress> entry : nodes.entrySet()) {
-                str.append("\n" + Util.convertBytesToHex(entry.getKey()) + " : " + entry.getValue());
+                str.append("\n" + convertBytesToHex(entry.getKey()) + " : " + entry.getValue());
             }
             str.append("\n--------------------");
             System.out.println(str.toString());
@@ -149,6 +179,8 @@ public class DiscoveryNode extends Thread {
                 Message requestMsg = (Message) in.readObject();
 
                 Message replyMsg = null;
+
+                System.out.println("received message type = " + requestMsg.getMsgType());
                 switch(requestMsg.getMsgType()) {
                     case Message.REGISTER_NODE_MSG:
                         RegisterMessage registerNodeMsg = (RegisterMessage) requestMsg;
@@ -167,13 +199,24 @@ public class DiscoveryNode extends Thread {
                                 }
                             }
 
-                            addNode(registerNodeMsg.getID(), new NodeAddress(registerNodeMsg.getNodeName(), socket.getInetAddress(), registerNodeMsg.getPort()));
+                            addNode(registerNodeMsg.getID(), new NodeAddress(registerNodeMsg.getID(), registerNodeMsg.getNodeName(), socket.getInetAddress(), registerNodeMsg.getPort()));
                         } catch(Exception e) {
                             replyMsg = new ErrorMessage(e.getMessage());
                         }
 
                         //print out nodes
                         printActiveNodes();
+
+                        break;
+                    case Message.NODE_LEAVE_MSG:
+
+                        NodeLeaveMsg nodeLeaveMsg = (NodeLeaveMsg)requestMsg;
+                        byte[] leaveId = nodeLeaveMsg.getID();
+                        NodeAddress leaveAddr = nodeLeaveMsg.getNodeAddress();
+                        removeNode(leaveId, leaveAddr);
+
+                        //print out nodes
+//                        printActiveNodes();
 
                         break;
                     case Message.REQUEST_RANDOM_NODE_MSG:
@@ -194,6 +237,7 @@ public class DiscoveryNode extends Thread {
                         }
                         break;
                     default:
+                        System.out.println(requestMsg.toString());
                         System.err.println("Unrecognized request message type '" + requestMsg.getMsgType() + "'");
                         break;
                 }
