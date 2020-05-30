@@ -4,49 +4,54 @@ import java.io.Serializable;
 import java.net.InetAddress;
 
 public class NodeAddress implements Serializable {
-        private String nodeName;
-        private InetAddress inetAddress;
-        private int port;
 
-	public NodeAddress(String nodeName, InetAddress inetAddress, int port) {
-            this.nodeName = nodeName;
-            this.inetAddress = inetAddress;
-            this.port = port;
-        }
+    private byte[] nodeId;
+    private String nodeName;
+    private InetAddress inetAddress;
+    private int port;
 
-        public void setInetAddress(InetAddress inetAddress) {
-            this.inetAddress = inetAddress;
-        }
+	public NodeAddress(byte[] nodeId, String nodeName, InetAddress inetAddress, int port) {
+        this.nodeId = nodeId;
+        this.nodeName = nodeName;
+        this.inetAddress = inetAddress;
+        this.port = port;
+    }
 
-        public InetAddress getInetAddress() {
-            return inetAddress;
-        }
+    public byte[] getNodeId() { return this.nodeId;}
 
-        public int getPort() {
-            return port;
-        }
+    public void setInetAddress(InetAddress inetAddress) {
+        this.inetAddress = inetAddress;
+    }
 
-        public String getNodeName() {
-            return nodeName;
-        }
+    public InetAddress getInetAddress() {
+        return inetAddress;
+    }
 
-        @Override
-        public boolean equals(Object o) {
-            if(o instanceof NodeAddress) {
-                NodeAddress nodeAddress = (NodeAddress) o;
-                int hostName = inetAddress.getHostName().compareTo(nodeAddress.getInetAddress().getHostName());
-                int hostAddress = inetAddress.getHostAddress().compareTo(nodeAddress.getInetAddress().getHostAddress());
+    public int getPort() {
+        return port;
+    }
 
-                if(port == nodeAddress.getPort() && (hostName == 0 || hostAddress == 0)) {
-                    return true;
-                }
+    public String getNodeName() {
+        return nodeName;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if(o instanceof NodeAddress) {
+            NodeAddress nodeAddress = (NodeAddress) o;
+            int hostName = inetAddress.getHostName().compareTo(nodeAddress.getInetAddress().getHostName());
+            int hostAddress = inetAddress.getHostAddress().compareTo(nodeAddress.getInetAddress().getHostAddress());
+
+            if(port == nodeAddress.getPort() && (hostName == 0 || hostAddress == 0)) {
+                return true;
             }
-
-            return false;
         }
 
-        @Override
-        public String toString() {
-            return nodeName;
+        return false;
+    }
+
+    @Override
+    public String toString() {
+        return nodeName;
         }
 }
