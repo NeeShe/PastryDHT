@@ -134,7 +134,7 @@ public class ClientNode {
 
         //send store data message to the random node
         System.out.println("Forwarding lookup node message with id " + convertBytesToHex(id) + " to node " + nodeAddress);
-        LookupNodeMsg lookupNodeMsg = new LookupNodeMsg(id, new NodeAddress("ClientNode", null, port), 0,requestType);
+        LookupNodeMsg lookupNodeMsg = new LookupNodeMsg(id, new NodeAddress(id,"ClientNode", null, port), 0,requestType);
         lookupNodeMsg.addHop(nodeAddress);
         Socket newDataSocket = new Socket(nodeAddress.getInetAddress(), nodeAddress.getPort());
 

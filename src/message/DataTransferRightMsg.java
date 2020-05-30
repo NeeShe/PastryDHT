@@ -2,20 +2,17 @@ package message;
 
 import util.NodeAddress;
 
-import java.util.HashMap;
 import java.util.Map;
 
-public class DataTransferMsg extends Message {
+public class DataTransferRightMsg extends Message {
     private byte[] id;
     private NodeAddress nodeAddress;
     public Map<String, byte[]> data;
-    public Map<String, byte[]> replicatedData;
 
-    public DataTransferMsg(byte[] id, NodeAddress nodeAddress, Map<String, byte[]> data, Map<String, byte[]> replicatedData){
+    public DataTransferRightMsg(byte[] id, NodeAddress nodeAddress, Map<String, byte[]> data){
         this.id = id;
         this.nodeAddress = nodeAddress;
         this.data = data;
-        this.replicatedData = replicatedData;
     }
 
     public byte[] getID() {
@@ -28,9 +25,8 @@ public class DataTransferMsg extends Message {
 
     public Map<String, byte[]> getData(){ return data;}
 
-    public Map<String, byte[]> getReplicatedData(){ return replicatedData;}
     @Override
     public int getMsgType() {
-        return DATA_TRANSFER_MSG;
+        return DATA_TRANSFER_RIGHT_MSG;
     }
 }
