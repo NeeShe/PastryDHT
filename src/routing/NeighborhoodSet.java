@@ -93,6 +93,11 @@ public class NeighborhoodSet {
         }
         return true;
     }
+
+    public boolean removeNode(PastryNode node, byte[] id, NodeAddress nodeAddress) {
+        return true;
+    }
+
     public Map<byte[], NodeAddress> get(PastryNode node) {
         node.readWriteLock.readLock().lock();
         try {
@@ -103,6 +108,16 @@ public class NeighborhoodSet {
             node.readWriteLock.readLock().unlock();
         }
     }
+
+    public Map<byte[], NodeAddress> getOriginalSet(PastryNode node) {
+        node.readWriteLock.readLock().lock();
+        try {
+            return this.neighborSet;
+        } finally {
+            node.readWriteLock.readLock().unlock();
+        }
+    }
+
 
     public void print(PastryNode node) {
         node.readWriteLock.readLock().lock();
