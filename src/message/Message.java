@@ -14,6 +14,7 @@ public abstract class Message implements Serializable {
             WRITE_DATA_MSG = 8,
             READ_DATA_MSG = 9,
             REQUEST_DATA_MSG = 10,
-            DATA_TRANSFER_MSG = 11;
+            DATA_TRANSFER_MSG = 11,
+            KEEP_ALIVE_MSG = 12;
     public abstract int getMsgType();
 }

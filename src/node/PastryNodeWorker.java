@@ -1,5 +1,6 @@
 package node;
 
+import data.LeafNodeInfoStore;
 import message.*;
 import util.NodeAddress;
 import util.Util;
@@ -10,7 +11,7 @@ import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
-
+import data.LeafNodeInfoStore.NodeInfo;
 import static util.Util.*;
 
 public class PastryNodeWorker extends Thread{
@@ -45,7 +46,7 @@ public class PastryNodeWorker extends Thread{
                 case Message.READ_DATA_MSG:
                     this.readDataHandler(requestMsg);
                     break;
-                case  Message.WRITE_DATA_MSG:
+                case Message.WRITE_DATA_MSG:
                     this.writeDataHandler(requestMsg);
                     break;
                 case Message.DATA_TRANSFER_MSG:
@@ -53,6 +54,9 @@ public class PastryNodeWorker extends Thread{
                     break;
                 case Message.REQUEST_DATA_MSG:
                     this.dataRequestHandler(requestMsg);
+                    break;
+                case Message.KEEP_ALIVE_MSG:
+                    this.keepAliveMsgHandler(requestMsg);
                     break;
                 default:
                     System.err.println("Unrecognized request message type '" + requestMsg.getMsgType() + "'");
@@ -73,6 +77,7 @@ public class PastryNodeWorker extends Thread{
             }
         }
     }
+
 
     private void nodeJoinHandler(Message requestMsg) {
         try{
@@ -427,8 +432,6 @@ public class PastryNodeWorker extends Thread{
 
     }
 
-
-
     private void dataRequestHandler(Message requestMsg) {
         try{
             RequestDataMessage requestDataMsg = (RequestDataMessage) requestMsg;
@@ -502,5 +505,16 @@ public class PastryNodeWorker extends Thread{
         }catch(Exception e){
             e.printStackTrace();
         }
+    }
+
+    private void keepAliveMsgHandler(Message requestMsg) {
+        try{
+            KeepAliveMsg keepAliveMsg = (KeepAliveMsg) requestMsg;
+            System.out.println("Received keep alive message from node:"+convertBytesToHex(keepAliveMsg.getID()));
+            this.node.leafNodeInfoStore.setNodeInfo(keepAliveMsg.getID(),keepAliveMsg.getTimestamp(),keepAliveMsg.getLeafSet());
+        }catch(Exception e){
+            e.printStackTrace();
+        }
+
     }
 }

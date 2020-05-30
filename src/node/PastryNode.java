@@ -1,6 +1,7 @@
 package node;
 
 import data.DataStore;
+import data.LeafNodeInfoStore;
 import message.*;
 import routing.LeafSet;
 import routing.NeighborhoodSet;
@@ -36,10 +37,12 @@ public class PastryNode extends Thread{
     public String name;
     public NodeAddress address;
     public DataStore dataStore;
+    public LeafNodeInfoStore leafNodeInfoStore;
     public LeafSet leafSet;
     public NeighborhoodSet neighborhoodSet;
     public RoutingTable routingTable;
     public ReadWriteLock readWriteLock;
+    public static long keepAlivePeriod = 60000; // 1 minute
 
     public PastryNode(byte[] id, String name, int port, int discoveryNodePort) {
 
@@ -50,6 +53,7 @@ public class PastryNode extends Thread{
         this.idStr = Util.convertBytesToHex(this.nodeID);
         this.address = new NodeAddress(this.name, null, this.port);
         this.dataStore = new DataStore();
+        this.leafNodeInfoStore = new LeafNodeInfoStore();
         this.leafSet = new LeafSet(this.nodeID, this.leafSize);
         this.neighborhoodSet = new NeighborhoodSet(this.nodeID,this.NEIGHBOR_SIZE);
         this.routingTable = new RoutingTable();
@@ -138,6 +142,12 @@ public class PastryNode extends Thread{
             byte[] id= (args.length == 4) ? Util.convertHexToBytes(args[3]) : Util.generateRandomID(ID_BYTES);
             PastryNode node = new PastryNode(id, name, port, discoveryNodePort);
             new Thread(node).start();
+
+            KeepAliveSender keepAliveSender = new KeepAliveSender(node,keepAlivePeriod);
+            new Thread(keepAliveSender).start();
+
+            FailureDetector failureDetector= new FailureDetector(node,keepAlivePeriod);
+            new Thread(failureDetector).start();
 
             Scanner scn = new Scanner(System.in);
             while (true) {
