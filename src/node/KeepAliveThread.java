@@ -13,17 +13,16 @@ import java.sql.Timestamp;
 
 import static util.Util.convertBytesToHex;
 
-public class KeepAliveSender extends Thread{
+public class KeepAliveThread extends Thread{
     protected PastryNode node;
     protected long timeIntervalInMilli;
 
-    public KeepAliveSender(PastryNode node, long timeIntervalInMilli) {
+    public KeepAliveThread(PastryNode node, long timeIntervalInMilli) {
         this.node = node;
         this.timeIntervalInMilli = timeIntervalInMilli;
     }
     @Override
     public void run(){
-        //TODO change while condition to isAlive
         try{
             while(true){
                 if (node.leafSet.leftSet.size() != 0) {
@@ -38,8 +37,7 @@ public class KeepAliveSender extends Thread{
                         nodeSocket.close();
                     } catch (ConnectException connEx) {
                         System.err.println("Connection exception in left leaf");
-                        FailureHandler handler = new FailureHandler(this.node);
-                        handler.handleFail(leftNodeID,FailureHandler.LEAF_NODE);
+                        this.node.failureHandler.handleFail(node,leftNodeID, FailureHandler.LEAF_NODE,FailureHandler.DISSEMINATE);
                     } catch (IOException e) {
                         e.printStackTrace();
                     }
@@ -55,9 +53,8 @@ public class KeepAliveSender extends Thread{
                         rightStream.writeObject(rightKeepAlive);
                         nodeSocket.close();
                     }catch(ConnectException connEx){
-                        System.err.println("Connection Exception");
-                        FailureHandler handler = new FailureHandler(this.node);
-                        handler.handleFail(rightNodeID,FailureHandler.LEAF_NODE);
+                        System.err.println("Connection Exception in right leaf");
+                        this.node.failureHandler.handleFail(node,rightNodeID, FailureHandler.LEAF_NODE,FailureHandler.DISSEMINATE);
                     }catch (IOException ex){
                         ex.printStackTrace();
                     }

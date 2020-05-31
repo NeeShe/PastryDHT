@@ -1,17 +1,13 @@
 package node;
 
-import data.LeafNodeInfoStore;
 import message.*;
 import util.NodeAddress;
 import util.Util;
 
 import java.io.*;
 import java.net.Socket;
-import java.util.HashMap;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import data.LeafNodeInfoStore.NodeInfo;
+import java.util.*;
+
 import static util.Util.*;
 
 public class PastryNodeWorker extends Thread{
@@ -36,7 +32,7 @@ public class PastryNodeWorker extends Thread{
             switch(requestMsg.getMsgType()) {
                 //once a new node joined, it sends a node_join_msg to one node
                 //that node will find the suitable place for it inside its routing table
-                //and than send the routing_info_msg back to the new node
+                //and then send the routing_info_msg back to the new node
                 //to let it update its routing info
                 case Message.NODE_JOIN_MSG:
                     //received by the node already existed
@@ -74,6 +70,9 @@ public class PastryNodeWorker extends Thread{
                     System.out.println("Node left successfully");
                     System.exit(1);
                     break;
+                case Message.NODE_FAIL_NOTIFY_MSG:
+                    this.nodeFailNotifyHandler(requestMsg);
+                    break;
                 default:
                     System.err.println("Unrecognized request message type '" + requestMsg.getMsgType() + "'");
                     break;
@@ -93,7 +92,6 @@ public class PastryNodeWorker extends Thread{
             }
         }
     }
-
 
     private void nodeJoinHandler(Message requestMsg) {
         try{
@@ -165,7 +163,7 @@ public class PastryNodeWorker extends Thread{
     //add all the incoming routing info as its own
     private void routingInfoHandler(Message requestMsg) {
         RoutingInfoMsg routingInfoMsg = (RoutingInfoMsg) requestMsg;
-        System.out.println("Received routing info message with " + routingInfoMsg.getLeafSet().size() + " routes.");
+        System.out.println("Received routing info message with ");
         boolean changed = false;
 
         //loop through leaf set if any
@@ -178,7 +176,9 @@ public class PastryNodeWorker extends Thread{
             }
 
             //update routing table based on each entry in leaf set
-            if(!java.util.Arrays.equals(entry.getKey(), node.nodeID)) { //if not this id
+            //TODO fix this everywhere.byte[] comparison is not consistent
+            //if(!java.util.Arrays.equals(entry.getKey(), node.nodeID)) {
+            if(!convertBytesToHex(entry.getKey()).equals(convertBytesToHex(node.nodeID))) {
                 String nodeIDStr = Util.convertBytesToHex(entry.getKey());
                 int i=0;
                 for(i=0; i<4; i++) { //find matching characters to find the row
@@ -205,14 +205,6 @@ public class PastryNodeWorker extends Thread{
         for(Map.Entry<byte[],NodeAddress> entry: routingInfoMsg.getNeighborSet().entrySet()){
             changed = this.node.neighborhoodSet.addNewNode(node,entry.getKey(),entry.getValue()) || changed;
         }
-        //print out leaf set and routing table. (if at least one entry in leaf set or routing table changed)
-        //neetha: not printing here as the print does not work in multiple thread. CHeck locks
-        //yinna: this can print correctly
-        //neetha: no. order is not maintained.. all the threads write. so same lines get printed multiple times
-//        if(changed) {
-//            node.leafSet.print(node);
-//            node.routingTable.print(node);
-//        }
 
         node.readWriteLock.readLock().lock();
         try {
@@ -312,6 +304,7 @@ public class PastryNodeWorker extends Thread{
                 RequestDataMessage requestDataMessage = new RequestDataMessage(this.node.nodeID,this.node.address);
                 for(Map.Entry<byte[],NodeAddress> entry : node.leafSet.leftSet.entrySet()) {
                     //send routing update
+                    System.out.println("Request data transfer from"+convertBytesToHex(entry.getKey()));
                     Socket nodeSocket = new Socket(entry.getValue().getInetAddress(), entry.getValue().getPort());
                     ObjectOutputStream nodeOut = new ObjectOutputStream(nodeSocket.getOutputStream());
                     nodeOut.writeObject(requestDataMessage);
@@ -319,6 +312,7 @@ public class PastryNodeWorker extends Thread{
                 }
                 for(Map.Entry<byte[],NodeAddress> entry : node.leafSet.rightSet.entrySet()) {
                     //send routing update
+                    System.out.println("Request data transfer from"+convertBytesToHex(entry.getKey()));
                     Socket nodeSocket = new Socket(entry.getValue().getInetAddress(), entry.getValue().getPort());
                     ObjectOutputStream nodeOut = new ObjectOutputStream(nodeSocket.getOutputStream());
                     nodeOut.writeObject(requestDataMessage);
@@ -327,6 +321,7 @@ public class PastryNodeWorker extends Thread{
             }
             }catch (Exception e) {
                 System.out.println(e.getMessage());
+                e.printStackTrace();
             } finally {
             node.readWriteLock.readLock().unlock();
         }
@@ -452,6 +447,7 @@ public class PastryNodeWorker extends Thread{
     }
 
     private void dataRequestHandler(Message requestMsg) {
+        node.readWriteLock.writeLock().lock();
         try{
             RequestDataMessage requestDataMsg = (RequestDataMessage) requestMsg;
             if(requestDataMsg.getNodeAddress().getInetAddress() == null) {
@@ -477,6 +473,7 @@ public class PastryNodeWorker extends Thread{
                 }
             }
             //search if the requester is in right set
+            ArrayList<String> removeList = new ArrayList<>();
             if(this.node.leafSet.rightSet.containsKey(requestDataMsg.getID())){
                 for(String dataId : node.dataStore.ownedData.keySet()) {
                     int dataIdInInt = Integer.parseInt(dataId,16);
@@ -485,17 +482,26 @@ public class PastryNodeWorker extends Thread{
                         dataToSend.put(dataId,node.dataStore.ownedData.get(dataId));
                         //dont remove but move it to replicated data store
                         dataToMove.put(dataId,node.dataStore.ownedData.get(dataId));
-                        node.dataStore.ownedData.remove(dataId);
+                        removeList.add(dataId);
+
                     }
                 }
+                for(String id: removeList){
+                    node.dataStore.ownedData.remove(id);
+                }
+                ArrayList<String> removeReplicaList = new ArrayList<>();
                 for(String dataId : node.dataStore.replicatedData.keySet()) {
                     int dataIdInInt = Integer.parseInt(dataId,16);
                     if(dataIdInInt > idInInt && dataIdInInt >= requesterIdInInt){
                         //now this data should belong to joining node
                         replicaToSend.put(dataId,node.dataStore.replicatedData.get(dataId));
                         //remove from replicated data
-                        node.dataStore.replicatedData.remove(dataId);
+                        removeReplicaList.add(dataId);
+
                     }
+                }
+                for(String id: removeReplicaList){
+                    node.dataStore.replicatedData.remove(id);
                 }
                 //now move data
                 node.dataStore.replicatedData.putAll(dataToMove);
@@ -510,6 +516,8 @@ public class PastryNodeWorker extends Thread{
             }
         }catch(Exception e){
             e.printStackTrace();
+        }finally {
+            node.readWriteLock.writeLock().unlock();
         }
     }
 
@@ -581,13 +589,26 @@ public class PastryNodeWorker extends Thread{
     }
 
     private void keepAliveMsgHandler(Message requestMsg) {
+        node.readWriteLock.writeLock().lock();
         try{
             KeepAliveMsg keepAliveMsg = (KeepAliveMsg) requestMsg;
             System.out.println("Received keep alive message from node:"+convertBytesToHex(keepAliveMsg.getID()));
-            this.node.leafNodeInfoStore.setNodeInfo(keepAliveMsg.getID(),keepAliveMsg.getTimestamp(),keepAliveMsg.getLeafSet());
+            this.node.leafNodeInfoStore.setNodeInfo(node,convertBytesToHex(keepAliveMsg.getID()),keepAliveMsg.getTimestamp(),keepAliveMsg.getLeafSet());
+        }catch(Exception e){
+            e.printStackTrace();
+        }finally {
+            node.readWriteLock.writeLock().unlock();
+        }
+    }
+
+    private void nodeFailNotifyHandler(Message requestMsg) {
+        try{
+            NodeFailNotifyMsg nodeFailNotifyMsg =(NodeFailNotifyMsg)requestMsg;
+            System.out.println("Received Node fail notification message. Node Failed:"+convertBytesToHex(nodeFailNotifyMsg.getID()));
+            //use handler to update state table
+            this.node.failureHandler.handleFail(node,nodeFailNotifyMsg.getID(), FailureHandler.LEAF_NODE,FailureHandler.NON_DISSEMINATE);
         }catch(Exception e){
             e.printStackTrace();
         }
-
     }
 }

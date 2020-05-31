@@ -53,7 +53,7 @@ public class RoutingTable {
         return false;
     }
 
-    public void removeFailNode(PastryNode node, String failIdStr, int prefixLen) {
+    public void removeNode(PastryNode node, String failIdStr, int prefixLen) {
         node.readWriteLock.writeLock().lock();
         try {
             if (routingTable.get(prefixLen).containsKey((failIdStr))) {
@@ -117,6 +117,7 @@ public class RoutingTable {
             }
             return closestAddr;
         } catch(Exception e){
+            //TODO fix this
             System.err.println("DEBUG: FIX THIS IF REACHED");
             e.printStackTrace();
             return null;

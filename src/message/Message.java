@@ -20,7 +20,8 @@ public abstract class Message implements Serializable {
             DATA_TRANSFER_MSG = 13,
             DATA_TRANSFER_RIGHT_MSG = 14,
             NODE_REMOVED_MSG = 15,
-            KEEP_ALIVE_MSG = 16;
+            KEEP_ALIVE_MSG = 16,
+            NODE_FAIL_NOTIFY_MSG = 17;
 
     public abstract int getMsgType();
 }

@@ -1,32 +1,56 @@
 package data;
 
-import javafx.scene.Node;
+import node.PastryNode;
 import util.NodeAddress;
-
 import java.sql.Timestamp;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
+import static util.Util.convertBytesToHex;
 
 public class LeafNodeInfoStore {
-    public Map<byte[], NodeInfo> nodeSet;
+    public HashMap<String, NodeInfo> nodeSet;
 
     public LeafNodeInfoStore(){
-        nodeSet = new HashMap<>();
+        this.nodeSet = new HashMap<>();
     }
 
-    public void setNodeInfo(byte[] id, Timestamp timestamp, Map<byte[], NodeAddress> leafSet){
+    public void setNodeInfo(PastryNode node,String id, Timestamp timestamp, Map<byte[], NodeAddress> leafSet){
         NodeInfo nodeInfo = new NodeInfo(timestamp,leafSet);
-        this.nodeSet.put(id,nodeInfo);
+        node.leafNodeInfoStore.nodeSet.put(id,nodeInfo);
     }
 
-    public Timestamp getTimestamp(byte[] id){
-        NodeInfo nodeInfo = this.nodeSet.get(id);
+    public Timestamp getTimestamp(PastryNode node,String id){
+        NodeInfo nodeInfo = node.leafNodeInfoStore.nodeSet.get(id);
         return nodeInfo.getTimestamp();
     }
 
-    public Map<byte[], NodeAddress> getLeafSet(byte[] id){
-        NodeInfo nodeInfo = this.nodeSet.get(id);
-        return nodeInfo.getLeafSet();
+    public Map<byte[], NodeAddress> getLeafSet(PastryNode node, String id){
+        node.readWriteLock.writeLock().lock();
+        Map<byte[], NodeAddress> leaves=null;
+        try{
+            NodeInfo nodeInfo = node.leafNodeInfoStore.nodeSet.get(id);
+            leaves =nodeInfo.getLeaves();
+
+        }catch (NullPointerException e){
+            System.err.println("Null pointer exception in LeafNodeInfoStore");
+        }finally {
+            node.readWriteLock.writeLock().unlock();
+        }
+        return leaves;
+    }
+
+    public  void removeNode(PastryNode node, String id){
+        node.readWriteLock.writeLock().lock();
+        try{
+            if(node.leafNodeInfoStore.nodeSet.containsKey(id)){
+                node.leafNodeInfoStore.nodeSet.remove(id);
+            }
+        }finally {
+            node.readWriteLock.writeLock().unlock();
+        }
+
     }
     public class NodeInfo{
         private Timestamp timestamp;
@@ -41,7 +65,7 @@ public class LeafNodeInfoStore {
             return timestamp;
         }
 
-        public Map<byte[], NodeAddress> getLeafSet(){
+        public Map<byte[], NodeAddress> getLeaves(){
             return leafSet;
         }
     }
