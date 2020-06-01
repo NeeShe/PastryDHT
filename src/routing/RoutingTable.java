@@ -36,6 +36,7 @@ public class RoutingTable {
         }
     }
 
+
     public boolean addNewNode(PastryNode node, String newIdStr, NodeAddress newAddress, int prefixLen) {
         node.readWriteLock.writeLock().lock();
         try {
@@ -50,6 +51,17 @@ public class RoutingTable {
             node.readWriteLock.writeLock().unlock();
         }
         return false;
+    }
+
+    public void removeNode(PastryNode node, String failIdStr, int prefixLen) {
+        node.readWriteLock.writeLock().lock();
+        try {
+            if (routingTable.get(prefixLen).containsKey((failIdStr))) {
+                routingTable.get(prefixLen).remove(failIdStr);
+            }
+        } finally {
+            node.readWriteLock.writeLock().unlock();
+        }
     }
 
     public void print(PastryNode node) {
@@ -105,6 +117,7 @@ public class RoutingTable {
             }
             return closestAddr;
         } catch(Exception e){
+            //TODO fix this
             System.err.println("DEBUG: FIX THIS IF REACHED");
             e.printStackTrace();
             return null;

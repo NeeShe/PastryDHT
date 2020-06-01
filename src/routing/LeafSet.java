@@ -146,6 +146,20 @@ public class LeafSet {
         return true;
     }
 
+    public void removeNode(PastryNode node, byte[] newId){
+        node.readWriteLock.writeLock().lock();
+        try{
+            //TODO might node work for byte[].
+            if(node.leafSet.leftSet.containsKey(newId)){
+                node.leafSet.leftSet.remove(newId);
+            }else if(node.leafSet.rightSet.containsKey(newId)){
+                node.leafSet.rightSet.remove(newId);
+            }
+        }finally {
+            node.readWriteLock.writeLock().unlock();
+        }
+    }
+
     public void print(PastryNode node) {
         node.readWriteLock.readLock().lock();
         try{

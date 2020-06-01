@@ -94,8 +94,15 @@ public class NeighborhoodSet {
         return true;
     }
 
-    public boolean removeNode(PastryNode node, byte[] id, NodeAddress nodeAddress) {
-        return true;
+    public void removeNode(PastryNode node, byte[] id) {
+        node.readWriteLock.writeLock().lock();
+        try{
+            if(node.neighborhoodSet.neighborSet.containsKey(id)){
+                node.neighborhoodSet.neighborSet.remove(id);
+            }
+        }finally {
+            node.readWriteLock.writeLock().unlock();
+        }
     }
 
     public Map<byte[], NodeAddress> get(PastryNode node) {

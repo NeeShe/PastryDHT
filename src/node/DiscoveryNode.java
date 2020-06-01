@@ -126,6 +126,21 @@ public class DiscoveryNode extends Thread {
         }
     }
 
+    protected void removeFailedNode(byte[] failId) throws Exception {
+        readWriteLock.writeLock().lock();
+        try {
+            //check to see if id already exists in cluster
+            for (byte[] id : nodes.keySet()) {
+                if (Arrays.equals(id, failId)) {
+                    nodes.remove(id);
+                }
+            }
+        } finally {
+            readWriteLock.writeLock().unlock();
+            printActiveNodes();
+        }
+    }
+
     public byte[] getRandomNode() throws Exception {
         readWriteLock.readLock().lock();
         try {
@@ -180,7 +195,7 @@ public class DiscoveryNode extends Thread {
 
                 Message replyMsg = null;
 
-                System.out.println("received message type = " + requestMsg.getMsgType());
+ //               System.out.println("received message type = " + requestMsg.getMsgType());
                 switch(requestMsg.getMsgType()) {
                     case Message.REGISTER_NODE_MSG:
                         RegisterMessage registerNodeMsg = (RegisterMessage) requestMsg;
@@ -214,10 +229,6 @@ public class DiscoveryNode extends Thread {
                         byte[] leaveId = nodeLeaveMsg.getID();
                         NodeAddress leaveAddr = nodeLeaveMsg.getNodeAddress();
                         removeNode(leaveId, leaveAddr);
-
-                        //print out nodes
-//                        printActiveNodes();
-
                         break;
                     case Message.REQUEST_RANDOM_NODE_MSG:
                         try {
@@ -235,6 +246,11 @@ public class DiscoveryNode extends Thread {
                         } catch(Exception e) {
                             replyMsg = new ErrorMessage(e.getMessage());
                         }
+                        break;
+                    case Message.NODE_FAIL_NOTIFY_MSG:
+                        NodeFailNotifyMsg nodeFailNotifyMsg =(NodeFailNotifyMsg)requestMsg;
+                        byte[] failId = nodeFailNotifyMsg.getID();
+                        removeFailedNode(failId);
                         break;
                     default:
                         System.out.println(requestMsg.toString());

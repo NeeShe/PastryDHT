@@ -17,6 +17,7 @@ public class DataStore {
     }
 
     public String searchDataID(PastryNode node, String searchId){
+        //TODO use lock
         if(node.dataStore.ownedData.containsKey(searchId)){
             return printByteAsString(node.dataStore.ownedData.get(searchId));
         }else if(node.dataStore.replicatedData.containsKey(searchId)){
@@ -26,6 +27,7 @@ public class DataStore {
     }
 
     public byte[] getByteData(PastryNode node, String dataId){
+        //TODO use lock
         if(node.dataStore.ownedData.containsKey(dataId)){
             return node.dataStore.ownedData.get(dataId);
         }else if(node.dataStore.replicatedData.containsKey(dataId)){
