@@ -13,12 +13,14 @@ import static util.Util.convertBytesToShort;
 
 public class LeafSet {
     private int leafSize;
+    private byte[] maxId;
     public SortedMap<byte[], NodeAddress> leftSet;
     public SortedMap<byte[], NodeAddress> rightSet;
 
     public LeafSet(byte[] id, int leafSize) {
         this.leafSize = leafSize;
        // short idInShort = convertBytesToShort(id);
+        maxId = null;
         String idInHex= convertBytesToHex(id);
         leftSet = new TreeMap<>(
                 new Comparator<byte[]>() {
@@ -98,16 +100,27 @@ public class LeafSet {
         System.out.println("Updating the leaf set of node ");
         node.readWriteLock.writeLock().lock();
         try{
+            if(maxId == null) {
+                maxId = newId;
+            }
+
             //If the new node's id is equal to the current node's id
             if(Arrays.equals(node.nodeID, newId)) {
                 return false;
             }
 
+
             String idInHex = convertBytesToHex(node.nodeID);
             String newIdInHex = convertBytesToHex(newId);
+            String maxIdInHex = convertBytesToHex(maxId);
 
             int idInInt = Integer.parseInt(idInHex,16);
             int newIdInInt = Integer.parseInt(newIdInHex,16);
+            int maxIdInInt = Integer.parseInt(maxIdInHex, 16);
+
+            if(newIdInInt > maxIdInInt) {
+                maxId = newId;
+            }
 
             //If the new node's id is equal to one of the node's id in LEFT leaf set
             for(byte[] id : this.leftSet.keySet()) {
@@ -137,6 +150,7 @@ public class LeafSet {
                 rightSet.remove(rightSet.firstKey());
                 rightSet.put(newId, newAddress);
             }
+
         } catch(Exception e){
             System.out.println("DEBUG: exception area2");
             e.printStackTrace();
@@ -222,5 +236,9 @@ public class LeafSet {
         } finally {
             node.readWriteLock.readLock().unlock();
         }
+    }
+
+    public byte[] getMaxId() {
+        return this.maxId;
     }
 }

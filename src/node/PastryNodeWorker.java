@@ -5,6 +5,7 @@ import util.NodeAddress;
 import util.Util;
 
 import java.io.*;
+import java.net.ConnectException;
 import java.net.Socket;
 import java.util.*;
 
@@ -72,6 +73,8 @@ public class PastryNodeWorker extends Thread{
                     break;
                 case Message.NODE_FAIL_NOTIFY_MSG:
                     this.nodeFailNotifyHandler(requestMsg);
+                    break;
+                case Message.TEST_CONNECT_MSG:
                     break;
                 default:
                     System.err.println("Unrecognized request message type '" + requestMsg.getMsgType() + "'");
@@ -339,7 +342,7 @@ public class PastryNodeWorker extends Thread{
         //check the request type
         //if read
         boolean foundData= false;
-        if(lookupNodeMsg.getRequestType() == 0){
+        if(lookupNodeMsg.getRequestType() == LookupNodeMsg.read){
             //search if you have data id in store
             String data = node.dataStore.searchDataID(node,convertBytesToHex(lookupNodeMsg.getID()));
             if (!data.equals("")){
@@ -367,18 +370,25 @@ public class PastryNodeWorker extends Thread{
                 lsMaxId = Integer.parseInt(convertBytesToHex(lsMaxIdInByte),16);
             }
 
+            boolean prefixChanged = false;
             //neetha: now lsMinId is always less than lsMaxId (no negative numbers)
             //min < search < max || (max < min < search || search < max < min)
+            System.out.println("original prefix = " + lookupNodeMsg.getPrefixLength());
             if ((this.node.leafSet.leftSet.size() > 0 && this.node.leafSet.rightSet.size() > 0) &&
                     (lsMinId <= searchId && searchId <= lsMaxId)) {    //min = 2, id = 4, max = 6
+                System.out.println("search closest leafset");
                 forwardAddr = this.node.leafSet.searchClosest(this.node, lookupNodeMsg.getID());
             } else {
+                System.out.println("search exact routing");
                 forwardAddr = this.node.routingTable.searchExact(this.node, lookupNodeMsg.getID(), lookupNodeMsg.getPrefixLength());
                 if (forwardAddr != null) {
                     lookupNodeMsg.setLongestPrefixMatch(lookupNodeMsg.getPrefixLength() + 1);
+                    System.out.println("seetitng prefix length");
                 } else {
+                    System.out.println("search closest routing");
                     forwardAddr = this.node.routingTable.searchClosest(this.node, lookupNodeMsg.getID(), lookupNodeMsg.getPrefixLength());
                     if (forwardAddr == null) {
+                        System.out.println("search closest leaf");
                         forwardAddr = this.node.leafSet.searchClosest(this.node, lookupNodeMsg.getID());
                     }
                 }
@@ -394,10 +404,40 @@ public class PastryNodeWorker extends Thread{
             } else {
                 //Keep forwarding the request to closer node
                 System.out.println("Forwarding lookup node message for id = " + convertBytesToHex(lookupNodeMsg.getID()) + " to closer node '" + forwardAddr + "'");
-                Socket socket = new Socket(forwardAddr.getInetAddress(), forwardAddr.getPort());
-                ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
-                out.writeObject(lookupNodeMsg);
-                socket.close();
+                try{
+                    Socket socket = new Socket(forwardAddr.getInetAddress(), forwardAddr.getPort());
+                    ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
+                    out.writeObject(lookupNodeMsg);
+                    socket.close();
+                } catch (ConnectException e) {
+                    System.out.println("The closer node with id = " + forwardAddr.getNodeId() + " cannot be connected."); //FIXME
+                    String failNodeIDStr = convertBytesToHex(forwardAddr.getNodeId());
+                    int prefix=0;
+                    for(prefix=0; prefix<4; prefix++) { //find matching characters to find the row
+                        if(node.idStr.charAt(prefix) != failNodeIDStr.charAt(prefix)) {
+                            failNodeIDStr = "" + failNodeIDStr.charAt(prefix);
+                            break;
+                        }
+                    }
+                    node.failureHandler.setRouting_prefix(prefix);
+                    node.failureHandler.handleFail(node, forwardAddr.getNodeId(), FailureHandler.ROUTE_NODE, FailureHandler.NON_DISSEMINATE);
+                    forwardAddr = node.failureHandler.getResultAddr();
+                    if(forwardAddr == null) {
+                        System.out.println("Current node is the closest node. Send response to '" + lookupNodeMsg.getNodeAddress() + "'");
+
+                        Socket socket = new Socket(lookupNodeMsg.getNodeAddress().getInetAddress(), lookupNodeMsg.getNodeAddress().getPort());
+                        ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
+                        out.writeObject(new NearByNodeInfoMsg(this.node.nodeID, new NodeAddress(this.node.nodeID, this.node.name, null, this.node.port)));
+                        socket.close();
+                    } else {
+                        System.out.println("Got new forward address" + forwardAddr);
+                        Socket socket = new Socket(forwardAddr.getInetAddress(), forwardAddr.getPort());
+                        ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
+                        out.writeObject(lookupNodeMsg);
+                        socket.close();
+                    }
+                }
+
             }
         }
     }
@@ -415,7 +455,7 @@ public class PastryNodeWorker extends Thread{
             replyMsg = new WriteDataMsg(readDataMsg.getID(), data);
         }else{
             System.out.println("Data with id = " + readId + " is not found on this node");
-            replyMsg = new ErrorMessage("The current node does not contain data with id = " + readId);
+            replyMsg = new NoDataMsg("The current node does not contain data with id = " + readId);
         }
     }
 
@@ -570,7 +610,8 @@ public class PastryNodeWorker extends Thread{
             int prefixLen = nodeLeaveMsg.getPrefixLength();
             if (prefixLen >= 0) {
                 //the msg is for routing table and already know where the leaving node is in the routing table
-                node.routingTable.get(node, prefixLen).remove(leaveIdStr.substring(prefixLen, prefixLen+1));
+//                node.routingTable.get(node, prefixLen).remove(leaveIdStr.substring(prefixLen, prefixLen+1));
+                node.routingTable.removeNode(node, leaveIdStr, prefixLen);
             } else {
                 //the msg is for leafset or neighborhood set
                 if (node.leafSet.leftSet.containsKey(leaveId)) {
@@ -601,6 +642,8 @@ public class PastryNodeWorker extends Thread{
         }
     }
 
+    //received message saying  there is a node failed    from other nodes
+    //need to remove that failed node from my states and update states accordingly.
     private void nodeFailNotifyHandler(Message requestMsg) {
         try{
             NodeFailNotifyMsg nodeFailNotifyMsg =(NodeFailNotifyMsg)requestMsg;

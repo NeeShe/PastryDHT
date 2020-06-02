@@ -5,6 +5,7 @@ import util.NodeAddress;
 
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.net.ConnectException;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
@@ -43,6 +44,10 @@ public class ClientNode {
                     requestType=0;
                     System.out.print("Data Id (or leave blank to auto-generate for Write operations): ");
                     String idStr = scn.nextLine();
+                    while((id != null && idStr.length() != 0 && idStr.length() < 4) || !isHexNumber(idStr)){
+                        System.out.print("id format incorrect, please enter again : ");
+                        idStr = scn.nextLine();
+                    }
                     if(opType.equalsIgnoreCase("W")) {
                         System.out.print("New Data Content: ");
                         String content = scn.nextLine();
@@ -62,9 +67,22 @@ public class ClientNode {
 
                 //assign node address to the new data node by getting a random node
                 NodeAddress nodeAddr = getRandomNode(discoveryNodeAddr, discoveryNodePort);
+
+                Socket testSocket = null;
+                try{
+                    testSocket = new Socket(nodeAddr.getInetAddress(), nodeAddr.getPort());
+                    TestConnectMsg testConnectMsg = new TestConnectMsg();
+                    ObjectOutputStream out = new ObjectOutputStream(testSocket.getOutputStream());
+                    out.writeObject(testConnectMsg);
+                    testSocket.close();
+                } catch (ConnectException e) {
+
+                    nodeAddr = getRandomNode(discoveryNodeAddr, discoveryNodePort);
+                    System.out.println("delete this------ original random node is not reachable, assigned another one");
+                }
+
                 //look for the closest node in network
                 NodeAddress closestNodeAddr = lookUpNode(nodeAddr, port,requestType);
-
 
                 if (opType.equalsIgnoreCase("W")) {
                     System.out.println("Writing data with id " + convertBytesToHex(id) );//+ " to node " + closestNodeAddr);
@@ -88,21 +106,40 @@ public class ClientNode {
                     socket.close();
 
                     if (replyMsg.getMsgType() == Message.ERROR_MSG) {
+                        System.out.println("error");
 //                        throw new Exception(((ErrorMessage) replyMsg).getMsg());
                         System.out.println(((ErrorMessage)replyMsg).getMsg());
                         System.exit(1);
-                    } else if (replyMsg.getMsgType() != Message.WRITE_DATA_MSG) {
+                    } else if(replyMsg.getMsgType() == Message.NO_DATA_MSG) {
+                        System.out.println(((NoDataMsg)replyMsg).getMsg());
+                    } else if (replyMsg.getMsgType() == Message.WRITE_DATA_MSG) {
+                        WriteDataMsg writeDataMsg = (WriteDataMsg) replyMsg;
+
+                        //write with data retrieved
+                        data = writeDataMsg.getData();
+                        System.out.println("Data found : " + printByteAsString(data));
+                    } else {
                         throw new Exception("Received an unexpected message type '" + replyMsg.getMsgType() + "'.");
                     }
 
-                    WriteDataMsg writeDataMsg = (WriteDataMsg) replyMsg;
 
-                    //write with data retrieved
-                    data = writeDataMsg.getData();
-                    System.out.println("Data found : " + printByteAsString(data));
                 }
             }
 
+    }
+
+    private static boolean isHexNumber(String str){
+        boolean flag = true;
+        for(int i=0;i<str.length();i++){
+            char cc = str.charAt(i);
+            if(cc!='0'&& cc!='1'&& cc!='2' && cc!='3'&& cc!='4' && cc!='5'&& cc!='6'&& cc!='7'
+                    &&cc!='8'&&cc!='9'&&cc!='A'&&cc!='B'&&cc!='C'&& cc!='D'&& cc!='E'&&cc!='F'
+                    &&cc!='a'&&cc!='b'&&cc!='c'&&cc!='c'&&cc!='d'&&cc!='e'&&cc!='f'){
+                flag = false;
+                break;
+            }
+        }
+        return flag;
     }
 
     public byte[] getData() {
@@ -136,12 +173,18 @@ public class ClientNode {
         System.out.println("Forwarding lookup node message with id " + convertBytesToHex(id) + " to node " + nodeAddress);
         LookupNodeMsg lookupNodeMsg = new LookupNodeMsg(id, new NodeAddress(id,"ClientNode", null, port), 0,requestType);
         lookupNodeMsg.addHop(nodeAddress);
-        Socket newDataSocket = new Socket(nodeAddress.getInetAddress(), nodeAddress.getPort());
 
-        ObjectOutputStream seedOut = new ObjectOutputStream(newDataSocket.getOutputStream());
-        seedOut.writeObject(lookupNodeMsg);
+        try {
+            Socket newDataSocket = new Socket(nodeAddress.getInetAddress(), nodeAddress.getPort());
 
-        newDataSocket.close();
+            ObjectOutputStream seedOut = new ObjectOutputStream(newDataSocket.getOutputStream());
+            seedOut.writeObject(lookupNodeMsg);
+
+            newDataSocket.close();
+        } catch (ConnectException e) {
+            System.out.println("Cannot connect to node with id " + nodeAddress.getNodeId());
+
+        }
 
 
         //System.out.println("Wait to receive connection from the node where the data should reside");

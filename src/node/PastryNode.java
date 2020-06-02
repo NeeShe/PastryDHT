@@ -13,10 +13,7 @@ import util.Util;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
-import java.net.InetAddress;
-import java.net.ServerSocket;
-import java.net.Socket;
-import java.net.UnknownHostException;
+import java.net.*;
 import java.util.Map;
 import java.util.Scanner;
 import java.util.concurrent.locks.ReadWriteLock;
@@ -128,6 +125,8 @@ public class PastryNode extends Thread{
             nodeSocket = new Socket(nodeInfoMsg.getNodeAddress().getInetAddress(), nodeInfoMsg.getNodeAddress().getPort());
             ObjectOutputStream nodeOut = new ObjectOutputStream(nodeSocket.getOutputStream());
             nodeOut.writeObject(nodeJoinMsg);
+        } catch (ConnectException e) {
+            System.out.println("Cannot connect to node with port " + nodeInfoMsg.getNodeAddress().getNodeId());
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -183,11 +182,7 @@ public class PastryNode extends Thread{
             Map<String, NodeAddress> routingTableRow = node.routingTable.get(node, prefixLen);
             System.out.println("routing table prefix="+prefixLen+ ": " + routingTableRow);
             for(String pre : routingTableRow.keySet()) {
-                System.out.println("prepre" + pre);
                 byte[] id = routingTableRow.get(pre).getNodeId();
-                System.out.println(id);
-                System.out.println(routingTableRow.get(pre));
-                System.out.println("before sending");
                 sendLeaveRequest(node, id, routingTableRow.get(pre), prefixLen);
             }
         }
@@ -223,6 +218,9 @@ public class PastryNode extends Thread{
                 //send out the message
                 ObjectOutputStream nodeOut = new ObjectOutputStream(nodeSocket.getOutputStream());
                 nodeOut.writeObject(dataTransferMsg);
+            } catch (ConnectException e) {
+                //TODO
+                //data transfer. if failed to connect, needs to transfer data to another node
             } catch (IOException e) {
                 e.printStackTrace();
             }
@@ -246,6 +244,7 @@ public class PastryNode extends Thread{
                 e.printStackTrace();
             }
         }
+        // FIXME
         ///////For test
         else {
             System.out.println("both leaf set are empty.");
@@ -279,6 +278,11 @@ public class PastryNode extends Thread{
             //send out the message
             ObjectOutputStream nodeOut = new ObjectOutputStream(nodeSocket.getOutputStream());
             nodeOut.writeObject(nodeLeaveMsg);
+        } catch (ConnectException e) {
+            //Here is to notify all the nodes in routing table and neighborhood set
+            //so we just need to remove the failed node
+//            node.failureHandler.handleFail(node, destId, node.failureHandler.LEAF_NODE, node.failureHandler.NON_DISSEMINATE);
+            System.out.println("Sorry, the node with id = " + destId + " cannot be reached.");
         } catch (IOException e) {
             e.printStackTrace();
         }
