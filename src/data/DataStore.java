@@ -17,21 +17,29 @@ public class DataStore {
     }
 
     public String searchDataID(PastryNode node, String searchId){
-        //TODO use lock
-        if(node.dataStore.ownedData.containsKey(searchId)){
-            return printByteAsString(node.dataStore.ownedData.get(searchId));
-        }else if(node.dataStore.replicatedData.containsKey(searchId)){
-            return printByteAsString(node.dataStore.replicatedData.get(searchId));
+        node.readWriteLock.readLock().lock();
+        try {
+            if (node.dataStore.ownedData.containsKey(searchId)) {
+                return printByteAsString(node.dataStore.ownedData.get(searchId));
+            } else if (node.dataStore.replicatedData.containsKey(searchId)) {
+                return printByteAsString(node.dataStore.replicatedData.get(searchId));
+            }
+        } finally {
+            node.readWriteLock.readLock().unlock();
         }
         return "";
     }
 
     public byte[] getByteData(PastryNode node, String dataId){
-        //TODO use lock
-        if(node.dataStore.ownedData.containsKey(dataId)){
-            return node.dataStore.ownedData.get(dataId);
-        }else if(node.dataStore.replicatedData.containsKey(dataId)){
-            return node.dataStore.replicatedData.get(dataId);
+        node.readWriteLock.readLock().lock();
+        try {
+            if (node.dataStore.ownedData.containsKey(dataId)) {
+                return node.dataStore.ownedData.get(dataId);
+            } else if (node.dataStore.replicatedData.containsKey(dataId)) {
+                return node.dataStore.replicatedData.get(dataId);
+            }
+        } finally {
+            node.readWriteLock.readLock().unlock();
         }
         return null;
     }

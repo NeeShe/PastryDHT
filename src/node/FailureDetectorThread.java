@@ -15,7 +15,7 @@ public class FailureDetectorThread extends Thread{
     public void run() {
         while (true) {
             try{
-                for(String leafNodeId: this.node.leafNodeInfoStore.nodeSet.keySet()){
+                for(String leafNodeId : this.node.leafNodeInfoStore.nodeSet.keySet()){
                     Timestamp currentTimestamp = new Timestamp(System.currentTimeMillis());
                     Timestamp nodeTimestamp = this.node.leafNodeInfoStore.getTimestamp(node,leafNodeId);
                     // if the last keep alive received is older than 2*T

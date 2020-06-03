@@ -27,6 +27,10 @@ public class RoutingTable {
         }
     }
 
+    public List<Map<String, NodeAddress>> get() {
+        return this.routingTable;
+    }
+
     public Map<String, NodeAddress> get(PastryNode node, int prefixLen) {
         node.readWriteLock.readLock().lock();
         try{
@@ -56,8 +60,10 @@ public class RoutingTable {
     public void removeNode(PastryNode node, String failIdStr, int prefixLen) {
         node.readWriteLock.writeLock().lock();
         try {
-            if (routingTable.get(prefixLen).containsKey((failIdStr))) {
-                routingTable.get(prefixLen).remove(failIdStr);
+            System.out.println("going to substring from prefix = " + prefixLen);
+            System.out.println(failIdStr);
+            if (routingTable.get(prefixLen).containsKey((failIdStr.substring(prefixLen, prefixLen + 1)))) {
+                routingTable.get(prefixLen).remove(failIdStr.substring(prefixLen, prefixLen + 1));
             }
         } finally {
             node.readWriteLock.writeLock().unlock();
@@ -96,6 +102,7 @@ public class RoutingTable {
         node.readWriteLock.readLock().lock();
         try {
             String searchIdStr = convertBytesToHex(searchId);
+
 //            short closest = (short)Integer.parseInt(node.idStr.substring(prefixLen, prefixLen+1), 16);
             short closest = (short)convertSingleHexToInt(node.idStr.substring(prefixLen, prefixLen+1));
             int closestDist = getHexDistance(node.idStr.substring(prefixLen, prefixLen+1), searchIdStr.substring(prefixLen, prefixLen+1));
@@ -118,7 +125,7 @@ public class RoutingTable {
             return closestAddr;
         } catch(Exception e){
             //TODO fix this
-            System.err.println("DEBUG: FIX THIS IF REACHED");
+            System.err.println("DEBUG: FIX THIS IF REACHED (with search id = " + searchId + "and prefix len = " + prefixLen + ")");
             e.printStackTrace();
             return null;
         } finally {
